@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type StageId = "discover" | "define" | "develop" | "deliver";
 type NoteKind = "note" | "evidence" | "assumption" | "decision";
@@ -9,6 +9,8 @@ type Note = {
   id: string;
   text: string;
   kind: NoteKind;
+  x?: number;
+  y?: number;
 };
 
 type Section = {
@@ -423,6 +425,14 @@ export default function Home() {
   const [savedFeedback, setSavedFeedback] = useState<Record<string, boolean>>({});
   const [toast, setToast] = useState("");
   const [hydrated, setHydrated] = useState(false);
+  const [canvasZoom, setCanvasZoom] = useState(0.82);
+  const [draggingSectionId, setDraggingSectionId] = useState<string | null>(null);
+  const [focusSectionId, setFocusSectionId] = useState<string | null>(null);
+  const [focusZoom, setFocusZoom] = useState(1);
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const sectionDrag = useRef<{ id: string; startX: number; startY: number; originX: number; originY: number } | null>(null);
+  const sectionDragMoved = useRef(false);
+  const noteDrag = useRef<{ sectionId: string; noteId: string; startX: number; startY: number; originX: number; originY: number } | null>(null);
 
   const stageMeta = STAGES[stage];
   const stageSections = useMemo(
@@ -440,6 +450,7 @@ export default function Home() {
     );
   }, [search, stageSections]);
   const selected = sections.find((section) => section.id === selectedId && section.status !== "Archived") ?? stageSections[0];
+  const focusSection = sections.find((section) => section.id === focusSectionId && section.status !== "Archived");
   const stageLinks = links.filter((link) => {
     const from = stageSections.find((section) => section.id === link.from);
     const to = stageSections.find((section) => section.id === link.to);
@@ -474,6 +485,7 @@ export default function Home() {
         setShowSectionModal(false);
         setLinkMode(false);
         setShowNotebook(false);
+        setFocusSectionId(null);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -492,6 +504,10 @@ export default function Home() {
   };
 
   const chooseSection = (section: Section) => {
+    if (sectionDragMoved.current) {
+      sectionDragMoved.current = false;
+      return;
+    }
     if (linkMode && linkSource && linkSource !== section.id) {
       setLinks((current) => [
         ...current,
@@ -506,6 +522,56 @@ export default function Home() {
     setCritiqueReady(false);
   };
 
+  const openSectionFocus = (section: Section) => {
+    setSelectedId(section.id);
+    setFocusSectionId(section.id);
+    setFocusZoom(1);
+    setCritiqueReady(false);
+  };
+
+  const beginSectionDrag = (event: React.PointerEvent<HTMLElement>, section: Section) => {
+    if (linkMode || event.button !== 0 || (event.target as HTMLElement).closest("button")) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    sectionDrag.current = {
+      id: section.id,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: section.x,
+      originY: section.y,
+    };
+    sectionDragMoved.current = false;
+    setDraggingSectionId(section.id);
+    setSelectedId(section.id);
+  };
+
+  const moveSection = (event: React.PointerEvent<HTMLElement>) => {
+    const drag = sectionDrag.current;
+    if (!drag) return;
+    const dx = (event.clientX - drag.startX) / canvasZoom;
+    const dy = (event.clientY - drag.startY) / canvasZoom;
+    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) sectionDragMoved.current = true;
+    setSections((current) => current.map((section) => section.id === drag.id
+      ? { ...section, x: Math.max(18, drag.originX + dx), y: Math.max(42, drag.originY + dy) }
+      : section));
+  };
+
+  const endSectionDrag = (event: React.PointerEvent<HTMLElement>) => {
+    if (!sectionDrag.current) return;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    sectionDrag.current = null;
+    setDraggingSectionId(null);
+  };
+
+  const zoomBoard = (amount: number) => {
+    setCanvasZoom((current) => Math.min(1.45, Math.max(0.45, Number((current + amount).toFixed(2)))));
+  };
+
+  const handleCanvasWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+    if (!event.ctrlKey && !event.metaKey) return;
+    event.preventDefault();
+    zoomBoard(event.deltaY > 0 ? -0.08 : 0.08);
+  };
+
   const beginLink = () => {
     if (!selected) return;
     setLinkMode(true);
@@ -515,10 +581,17 @@ export default function Home() {
 
   const addNote = () => {
     if (!selected || !composer || !newText.trim()) return;
+    const noteIndex = selected.notes.length;
     setSections((current) =>
       current.map((section) =>
         section.id === selected.id
-          ? { ...section, notes: [...section.notes, { id: makeId("note"), kind: composer, text: newText.trim() }] }
+          ? { ...section, notes: [...section.notes, {
+              id: makeId("note"),
+              kind: composer,
+              text: newText.trim(),
+              x: 86 + (noteIndex % 3) * 246,
+              y: 102 + Math.floor(noteIndex / 3) * 176,
+            }] }
           : section,
       ),
     );
@@ -556,10 +629,67 @@ export default function Home() {
     setSections((current) => current.map((section) => section.id === selected.id ? { ...section, notebook: value } : section));
   };
 
-  const updateNote = (noteId: string, text: string) => {
-    if (!selected) return;
-    setSections((current) => current.map((section) => section.id === selected.id
+  const updateNote = (sectionId: string, noteId: string, text: string) => {
+    setSections((current) => current.map((section) => section.id === sectionId
       ? { ...section, notes: section.notes.map((note) => note.id === noteId ? { ...note, text } : note) }
+      : section));
+  };
+
+  const addFreeNote = (sectionId: string, x = 160, y = 120, kind: NoteKind = "note") => {
+    const id = makeId("free-note");
+    setSections((current) => current.map((section) => section.id === sectionId
+      ? { ...section, notes: [...section.notes, { id, kind, text: "", x, y }] }
+      : section));
+    setEditingNoteId(id);
+    setCritiqueReady(false);
+  };
+
+  const beginNoteDrag = (
+    event: React.PointerEvent<HTMLButtonElement>,
+    sectionId: string,
+    note: Note,
+    index: number,
+  ) => {
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    noteDrag.current = {
+      sectionId,
+      noteId: note.id,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: note.x ?? 86 + (index % 3) * 246,
+      originY: note.y ?? 102 + Math.floor(index / 3) * 176,
+    };
+  };
+
+  const moveNote = (event: React.PointerEvent<HTMLButtonElement>) => {
+    const drag = noteDrag.current;
+    if (!drag) return;
+    const x = Math.max(22, drag.originX + (event.clientX - drag.startX) / focusZoom);
+    const y = Math.max(52, drag.originY + (event.clientY - drag.startY) / focusZoom);
+    setSections((current) => current.map((section) => section.id === drag.sectionId
+      ? { ...section, notes: section.notes.map((note) => note.id === drag.noteId ? { ...note, x, y } : note) }
+      : section));
+  };
+
+  const endNoteDrag = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (!noteDrag.current) return;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    noteDrag.current = null;
+  };
+
+  const cycleNoteKind = (sectionId: string, noteId: string) => {
+    const order: NoteKind[] = ["note", "evidence", "assumption", "decision"];
+    setSections((current) => current.map((section) => section.id === sectionId
+      ? { ...section, notes: section.notes.map((note) => note.id === noteId
+          ? { ...note, kind: order[(order.indexOf(note.kind) + 1) % order.length] }
+          : note) }
+      : section));
+  };
+
+  const deleteFreeNote = (sectionId: string, noteId: string) => {
+    setSections((current) => current.map((section) => section.id === sectionId
+      ? { ...section, notes: section.notes.filter((note) => note.id !== noteId) }
       : section));
   };
 
@@ -722,8 +852,9 @@ export default function Home() {
         </div>
 
         {view === "board" ? (
-          <div className={`canvas ${linkMode ? "linking" : ""}`}>
+          <div className={`canvas ${linkMode ? "linking" : ""}`} onWheel={handleCanvasWheel}>
             <div className="canvas-label"><span>{stageMeta.name} canvas</span><small>{stageSections.length} thinking sections · autosaved</small></div>
+            <div className="canvas-world" style={{ transform: `scale(${canvasZoom})` }}>
             {stageLinks.map((link) => {
               const from = stageSections.find((section) => section.id === link.from);
               const to = stageSections.find((section) => section.id === link.to);
@@ -743,11 +874,19 @@ export default function Home() {
             {visibleSections.map((section) => (
               <article
                 key={section.id}
-                className={`section-card ${selected?.id === section.id ? "selected" : ""}`}
+                className={`section-card ${selected?.id === section.id ? "selected" : ""} ${draggingSectionId === section.id ? "dragging" : ""}`}
                 style={{ left: section.x, top: section.y }}
                 onClick={() => chooseSection(section)}
+                onDoubleClick={() => openSectionFocus(section)}
+                onPointerDown={(event) => beginSectionDrag(event, section)}
+                onPointerMove={moveSection}
+                onPointerUp={endSectionDrag}
+                onPointerCancel={endSectionDrag}
                 tabIndex={0}
-                onKeyDown={(event) => { if (event.key === "Enter") chooseSection(section); }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") openSectionFocus(section);
+                  if (event.key === " ") chooseSection(section);
+                }}
               >
                 <div className="section-topline"><span>{section.eyebrow}</span><div className="owner">{section.owner}</div></div>
                 <h2>{section.title}</h2>
@@ -758,13 +897,23 @@ export default function Home() {
                 <footer>
                   <span className={`status-dot ${section.status.toLowerCase().replaceAll(" ", "-")}`} />
                   <span>{section.status}</span>
-                  <button aria-label={`Add note to ${section.title}`} onClick={(event) => { event.stopPropagation(); setSelectedId(section.id); setComposer("note"); }}>＋</button>
+                  <div className="card-actions">
+                    <button aria-label={`Add note to ${section.title}`} title="Add note" onClick={(event) => { event.stopPropagation(); setSelectedId(section.id); setComposer("note"); }}>＋</button>
+                    <button aria-label={`Open ${section.title} workspace`} title="Open node workspace" onClick={(event) => { event.stopPropagation(); openSectionFocus(section); }}>↗</button>
+                  </div>
                 </footer>
               </article>
             ))}
             {visibleSections.length === 0 && <div className="empty-search">No sections match “{search}” in {stageMeta.name}.</div>}
             <button className="add-floating" onClick={() => setShowSectionModal(true)}><span>＋</span> Add thinking section</button>
-            <div className="zoom-controls"><button aria-label="Zoom out">−</button><span>82%</span><button aria-label="Zoom in">＋</button><button aria-label="Fit canvas">⌗</button></div>
+            </div>
+            <div className="canvas-help"><span>Drag sections</span><i />Double-click to enter<i />Pinch or Ctrl-scroll to zoom</div>
+            <div className="zoom-controls">
+              <button aria-label="Zoom out" onClick={() => zoomBoard(-0.1)}>−</button>
+              <span>{Math.round(canvasZoom * 100)}%</span>
+              <button aria-label="Zoom in" onClick={() => zoomBoard(0.1)}>＋</button>
+              <button aria-label="Fit canvas" onClick={() => setCanvasZoom(0.82)}>⌗</button>
+            </div>
           </div>
         ) : (
           <div className="outline-view">
@@ -841,6 +990,99 @@ export default function Home() {
         )}
       </aside>
 
+      {focusSection && (
+        <section className="focus-space" aria-label={`${focusSection.title} focused workspace`}>
+          <header className="focus-header">
+            <button className="focus-back" onClick={() => setFocusSectionId(null)}><span>←</span> Back to {stageMeta.name} board</button>
+            <div className="focus-title">
+              <span>{focusSection.eyebrow}</span>
+              <h1>{focusSection.title}</h1>
+            </div>
+            <div className="focus-actions">
+              <button className="focus-quiet" onClick={() => setShowNotebook(true)}>≡ Notebook</button>
+              <button className="focus-add" onClick={() => addFreeNote(focusSection.id, 150, 120)}>＋ Text note</button>
+              <button className="focus-add evidence" onClick={() => addFreeNote(focusSection.id, 400, 150, "evidence")}>＋ Evidence</button>
+            </div>
+          </header>
+          <div className="focus-subbar">
+            <div><i /> Autosaved locally</div>
+            <strong>Move notes by their handle · type directly · double-click empty space to add</strong>
+            <span>{focusSection.notes.length} items</span>
+          </div>
+          <div className="focus-canvas">
+            <div
+              className="focus-world"
+              style={{ transform: `scale(${focusZoom})` }}
+              onDoubleClick={(event) => {
+                if (event.currentTarget !== event.target) return;
+                const bounds = event.currentTarget.getBoundingClientRect();
+                addFreeNote(
+                  focusSection.id,
+                  (event.clientX - bounds.left) / focusZoom,
+                  (event.clientY - bounds.top) / focusZoom,
+                );
+              }}
+            >
+              <div className="focus-prompt">
+                <span>THINKING SPACE</span>
+                <p>{focusSection.notebook}</p>
+              </div>
+              {focusSection.notes.map((note, index) => (
+                <article
+                  key={note.id}
+                  className={`focus-note ${note.kind}`}
+                  style={{
+                    left: note.x ?? 86 + (index % 3) * 246,
+                    top: note.y ?? 102 + Math.floor(index / 3) * 176,
+                  }}
+                  onDoubleClick={(event) => event.stopPropagation()}
+                >
+                  <header>
+                    <button
+                      className="focus-note-handle"
+                      aria-label="Move note"
+                      title="Drag to move"
+                      onPointerDown={(event) => beginNoteDrag(event, focusSection.id, note, index)}
+                      onPointerMove={moveNote}
+                      onPointerUp={endNoteDrag}
+                      onPointerCancel={endNoteDrag}
+                    ><i /><i /><i /></button>
+                    <button className="focus-kind" onClick={() => cycleNoteKind(focusSection.id, note.id)} title="Change item type">{note.kind}</button>
+                    <button className="focus-delete" onClick={() => deleteFreeNote(focusSection.id, note.id)} aria-label="Delete note">×</button>
+                  </header>
+                  <textarea
+                    autoFocus={editingNoteId === note.id}
+                    value={note.text}
+                    onFocus={() => setEditingNoteId(note.id)}
+                    onChange={(event) => updateNote(focusSection.id, note.id, event.target.value)}
+                    placeholder="Type your idea…"
+                    aria-label={`${note.kind} text`}
+                  />
+                  <footer><span>{note.text.trim().split(/\s+/).filter(Boolean).length} words</span><span>{focusSection.owner}</span></footer>
+                </article>
+              ))}
+              {focusSection.notes.length === 0 && (
+                <button className="focus-empty" onClick={() => addFreeNote(focusSection.id, 260, 180)}>
+                  <span>＋</span><strong>Start brainstorming</strong><small>Add your first text note</small>
+                </button>
+              )}
+            </div>
+            <div className="focus-legend">
+              <span><i className="note" />Note</span>
+              <span><i className="evidence" />Evidence</span>
+              <span><i className="assumption" />Assumption</span>
+              <span><i className="decision" />Decision</span>
+            </div>
+            <div className="zoom-controls focus-zoom">
+              <button aria-label="Zoom focused workspace out" onClick={() => setFocusZoom((value) => Math.max(0.55, value - 0.1))}>−</button>
+              <span>{Math.round(focusZoom * 100)}%</span>
+              <button aria-label="Zoom focused workspace in" onClick={() => setFocusZoom((value) => Math.min(1.5, value + 0.1))}>＋</button>
+              <button aria-label="Reset focused workspace zoom" onClick={() => setFocusZoom(1)}>⌗</button>
+            </div>
+          </div>
+        </section>
+      )}
+
       {showNotebook && selected && (
         <div className="notebook-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target) setShowNotebook(false); }}>
           <section className="notebook-panel" aria-label={`${selected.title} notebook`}>
@@ -857,7 +1099,7 @@ export default function Home() {
                   {selected.notes.map((note) => (
                     <label key={note.id} className={`editable-note ${note.kind}`}>
                       <span>{note.kind}</span>
-                      <textarea value={note.text} onChange={(event) => updateNote(note.id, event.target.value)} />
+                      <textarea value={note.text} onChange={(event) => updateNote(selected.id, note.id, event.target.value)} />
                     </label>
                   ))}
                 </div>
