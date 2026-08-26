@@ -45,7 +45,7 @@ const STAGES: Record<StageId, {
   mindset: string;
 }> = {
   discover: {
-    index: "01",
+    index: "D1",
     name: "Discover",
     color: "#e95a45",
     soft: "#fff0eb",
@@ -55,7 +55,7 @@ const STAGES: Record<StageId, {
     mindset: "with empathy",
   },
   define: {
-    index: "02",
+    index: "D2",
     name: "Define",
     color: "#e9a327",
     soft: "#fff5dc",
@@ -65,7 +65,7 @@ const STAGES: Record<StageId, {
     mindset: "with mindfulness",
   },
   develop: {
-    index: "03",
+    index: "D3",
     name: "Develop",
     color: "#65aa58",
     soft: "#eef8e9",
@@ -75,7 +75,7 @@ const STAGES: Record<StageId, {
     mindset: "with joyfulness",
   },
   deliver: {
-    index: "04",
+    index: "D4",
     name: "Deliver",
     color: "#4297cf",
     soft: "#e9f5fc",
@@ -138,12 +138,12 @@ const DEFAULT_SECTIONS: Section[] = [
   },
   {
     id: "persona-mei",
-    stage: "discover",
+    stage: "define",
     title: "Persona · Mei",
     eyebrow: "Research-backed persona",
     status: "In progress",
-    x: 256,
-    y: 370,
+    x: 82,
+    y: 378,
     owner: "AL",
     tags: ["persona", "needs"],
     notes: [
@@ -154,12 +154,12 @@ const DEFAULT_SECTIONS: Section[] = [
   },
   {
     id: "opportunity-signals",
-    stage: "discover",
-    title: "Opportunity signals",
-    eyebrow: "Emerging synthesis",
+    stage: "develop",
+    title: "Opportunities",
+    eyebrow: "Develop opportunity space",
     status: "In progress",
-    x: 596,
-    y: 402,
+    x: 696,
+    y: 390,
     owner: "JS",
     tags: ["patterns", "tensions"],
     notes: [
@@ -235,7 +235,7 @@ const DEFAULT_SECTIONS: Section[] = [
   {
     id: "idea-sprint",
     stage: "develop",
-    title: "Idea sprint",
+    title: "Brainstorming",
     eyebrow: "Diverge · 28 ideas",
     status: "Reviewed",
     x: 82,
@@ -406,6 +406,28 @@ function makeId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function apply4DStageTaxonomy(items: Section[]) {
+  return items.map((section) => {
+    if (section.id === "persona-mei" && section.stage !== "define") {
+      return { ...section, stage: "define" as StageId, x: 82, y: 378 };
+    }
+    if (section.id === "opportunity-signals") {
+      return {
+        ...section,
+        stage: "develop" as StageId,
+        title: section.title === "Opportunity signals" ? "Opportunities" : section.title,
+        eyebrow: section.eyebrow === "Emerging synthesis" ? "Develop opportunity space" : section.eyebrow,
+        x: section.stage === "develop" ? section.x : 696,
+        y: section.stage === "develop" ? section.y : 390,
+      };
+    }
+    if (section.id === "idea-sprint" && section.title === "Idea sprint") {
+      return { ...section, title: "Brainstorming" };
+    }
+    return section;
+  });
+}
+
 export default function Home() {
   const [stage, setStage] = useState<StageId>("discover");
   const [sections, setSections] = useState<Section[]>(DEFAULT_SECTIONS);
@@ -426,13 +448,19 @@ export default function Home() {
   const [toast, setToast] = useState("");
   const [hydrated, setHydrated] = useState(false);
   const [canvasZoom, setCanvasZoom] = useState(0.82);
+  const [canvasPan, setCanvasPan] = useState({ x: 0, y: 0 });
+  const [canvasPanning, setCanvasPanning] = useState(false);
   const [draggingSectionId, setDraggingSectionId] = useState<string | null>(null);
   const [focusSectionId, setFocusSectionId] = useState<string | null>(null);
   const [focusZoom, setFocusZoom] = useState(1);
+  const [focusPan, setFocusPan] = useState({ x: 0, y: 0 });
+  const [focusPanning, setFocusPanning] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const sectionDrag = useRef<{ id: string; startX: number; startY: number; originX: number; originY: number } | null>(null);
   const sectionDragMoved = useRef(false);
   const noteDrag = useRef<{ sectionId: string; noteId: string; startX: number; startY: number; originX: number; originY: number } | null>(null);
+  const canvasPanDrag = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
+  const focusPanDrag = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
 
   const stageMeta = STAGES[stage];
   const stageSections = useMemo(
@@ -463,7 +491,7 @@ export default function Home() {
       try {
         const parsed = JSON.parse(saved) as { sections: Section[]; links: BoardLink[] };
         if (Array.isArray(parsed.sections) && Array.isArray(parsed.links)) {
-          setSections(parsed.sections);
+          setSections(apply4DStageTaxonomy(parsed.sections));
           setLinks(parsed.links);
         }
       } catch {
@@ -526,6 +554,7 @@ export default function Home() {
     setSelectedId(section.id);
     setFocusSectionId(section.id);
     setFocusZoom(1);
+    setFocusPan({ x: 0, y: 0 });
     setCritiqueReady(false);
   };
 
@@ -567,9 +596,85 @@ export default function Home() {
   };
 
   const handleCanvasWheel = (event: React.WheelEvent<HTMLDivElement>) => {
-    if (!event.ctrlKey && !event.metaKey) return;
     event.preventDefault();
-    zoomBoard(event.deltaY > 0 ? -0.08 : 0.08);
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const pointer = { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
+    const next = Math.min(1.45, Math.max(0.45, Number((canvasZoom + (event.deltaY > 0 ? -0.08 : 0.08)).toFixed(2))));
+    setCanvasPan((pan) => ({
+      x: pointer.x - (pointer.x - pan.x) * (next / canvasZoom),
+      y: pointer.y - (pointer.y - pan.y) * (next / canvasZoom),
+    }));
+    setCanvasZoom(next);
+  };
+
+  const beginCanvasPan = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 2) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    canvasPanDrag.current = {
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: canvasPan.x,
+      originY: canvasPan.y,
+    };
+    setCanvasPanning(true);
+  };
+
+  const moveCanvasPan = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = canvasPanDrag.current;
+    if (!drag) return;
+    setCanvasPan({
+      x: drag.originX + event.clientX - drag.startX,
+      y: drag.originY + event.clientY - drag.startY,
+    });
+  };
+
+  const endCanvasPan = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!canvasPanDrag.current) return;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    canvasPanDrag.current = null;
+    setCanvasPanning(false);
+  };
+
+  const handleFocusWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const pointer = { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
+    const next = Math.min(1.5, Math.max(0.55, Number((focusZoom + (event.deltaY > 0 ? -0.08 : 0.08)).toFixed(2))));
+    setFocusPan((pan) => ({
+      x: pointer.x - (pointer.x - pan.x) * (next / focusZoom),
+      y: pointer.y - (pointer.y - pan.y) * (next / focusZoom),
+    }));
+    setFocusZoom(next);
+  };
+
+  const beginFocusPan = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 2) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    focusPanDrag.current = {
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: focusPan.x,
+      originY: focusPan.y,
+    };
+    setFocusPanning(true);
+  };
+
+  const moveFocusPan = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = focusPanDrag.current;
+    if (!drag) return;
+    setFocusPan({
+      x: drag.originX + event.clientX - drag.startX,
+      y: drag.originY + event.clientY - drag.startY,
+    });
+  };
+
+  const endFocusPan = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!focusPanDrag.current) return;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    focusPanDrag.current = null;
+    setFocusPanning(false);
   };
 
   const beginLink = () => {
@@ -650,6 +755,7 @@ export default function Home() {
     note: Note,
     index: number,
   ) => {
+    if (event.button !== 0) return;
     event.stopPropagation();
     event.currentTarget.setPointerCapture(event.pointerId);
     noteDrag.current = {
@@ -803,6 +909,8 @@ export default function Home() {
                   if (first) setSelectedId(first.id);
                   setCritiqueReady(false);
                   setShowNotebook(false);
+                  setCanvasZoom(0.82);
+                  setCanvasPan({ x: 0, y: 0 });
                 }}
               >
                 <span className="stage-number">{complete ? "✓" : item.index}</span>
@@ -852,9 +960,17 @@ export default function Home() {
         </div>
 
         {view === "board" ? (
-          <div className={`canvas ${linkMode ? "linking" : ""}`} onWheel={handleCanvasWheel}>
+          <div
+            className={`canvas ${linkMode ? "linking" : ""} ${canvasPanning ? "panning" : ""}`}
+            onWheel={handleCanvasWheel}
+            onContextMenu={(event) => event.preventDefault()}
+            onPointerDown={beginCanvasPan}
+            onPointerMove={moveCanvasPan}
+            onPointerUp={endCanvasPan}
+            onPointerCancel={endCanvasPan}
+          >
             <div className="canvas-label"><span>{stageMeta.name} canvas</span><small>{stageSections.length} thinking sections · autosaved</small></div>
-            <div className="canvas-world" style={{ transform: `scale(${canvasZoom})` }}>
+            <div className="canvas-world" style={{ transform: `translate(${canvasPan.x}px, ${canvasPan.y}px) scale(${canvasZoom})` }}>
             {stageLinks.map((link) => {
               const from = stageSections.find((section) => section.id === link.from);
               const to = stageSections.find((section) => section.id === link.to);
@@ -888,7 +1004,10 @@ export default function Home() {
                   if (event.key === " ") chooseSection(section);
                 }}
               >
-                <div className="section-topline"><span>{section.eyebrow}</span><div className="owner">{section.owner}</div></div>
+                <div className="section-topline">
+                  <div className="section-labels"><b>{STAGES[section.stage].index}</b><span>{STAGES[section.stage].name}</span><i />{section.eyebrow}</div>
+                  <div className="owner">{section.owner}</div>
+                </div>
                 <h2>{section.title}</h2>
                 <div className="note-stack">
                   {section.notes.slice(0, 3).map((note) => <span key={note.id} className={`mini-note ${note.kind}`}>{note.text}</span>)}
@@ -907,12 +1026,12 @@ export default function Home() {
             {visibleSections.length === 0 && <div className="empty-search">No sections match “{search}” in {stageMeta.name}.</div>}
             <button className="add-floating" onClick={() => setShowSectionModal(true)}><span>＋</span> Add thinking section</button>
             </div>
-            <div className="canvas-help"><span>Drag sections</span><i />Double-click to enter<i />Pinch or Ctrl-scroll to zoom</div>
+            <div className="canvas-help"><span>Left-drag a section</span><i />Right-drag to pan<i />Scroll to zoom<i />Double-click to enter</div>
             <div className="zoom-controls">
               <button aria-label="Zoom out" onClick={() => zoomBoard(-0.1)}>−</button>
               <span>{Math.round(canvasZoom * 100)}%</span>
               <button aria-label="Zoom in" onClick={() => zoomBoard(0.1)}>＋</button>
-              <button aria-label="Fit canvas" onClick={() => setCanvasZoom(0.82)}>⌗</button>
+              <button aria-label="Fit canvas" onClick={() => { setCanvasZoom(0.82); setCanvasPan({ x: 0, y: 0 }); }}>⌗</button>
             </div>
           </div>
         ) : (
@@ -995,7 +1114,7 @@ export default function Home() {
           <header className="focus-header">
             <button className="focus-back" onClick={() => setFocusSectionId(null)}><span>←</span> Back to {stageMeta.name} board</button>
             <div className="focus-title">
-              <span>{focusSection.eyebrow}</span>
+              <span><b>{STAGES[focusSection.stage].index}</b> {STAGES[focusSection.stage].name} · {focusSection.eyebrow}</span>
               <h1>{focusSection.title}</h1>
             </div>
             <div className="focus-actions">
@@ -1006,13 +1125,21 @@ export default function Home() {
           </header>
           <div className="focus-subbar">
             <div><i /> Autosaved locally</div>
-            <strong>Move notes by their handle · type directly · double-click empty space to add</strong>
+            <strong>Right-drag to pan · scroll to zoom · move notes by their handle · type directly</strong>
             <span>{focusSection.notes.length} items</span>
           </div>
-          <div className="focus-canvas">
+          <div
+            className={`focus-canvas ${focusPanning ? "panning" : ""}`}
+            onWheel={handleFocusWheel}
+            onContextMenu={(event) => event.preventDefault()}
+            onPointerDown={beginFocusPan}
+            onPointerMove={moveFocusPan}
+            onPointerUp={endFocusPan}
+            onPointerCancel={endFocusPan}
+          >
             <div
               className="focus-world"
-              style={{ transform: `scale(${focusZoom})` }}
+              style={{ transform: `translate(${focusPan.x}px, ${focusPan.y}px) scale(${focusZoom})` }}
               onDoubleClick={(event) => {
                 if (event.currentTarget !== event.target) return;
                 const bounds = event.currentTarget.getBoundingClientRect();
@@ -1077,7 +1204,7 @@ export default function Home() {
               <button aria-label="Zoom focused workspace out" onClick={() => setFocusZoom((value) => Math.max(0.55, value - 0.1))}>−</button>
               <span>{Math.round(focusZoom * 100)}%</span>
               <button aria-label="Zoom focused workspace in" onClick={() => setFocusZoom((value) => Math.min(1.5, value + 0.1))}>＋</button>
-              <button aria-label="Reset focused workspace zoom" onClick={() => setFocusZoom(1)}>⌗</button>
+              <button aria-label="Reset focused workspace zoom" onClick={() => { setFocusZoom(1); setFocusPan({ x: 0, y: 0 }); }}>⌗</button>
             </div>
           </div>
         </section>

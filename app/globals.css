@@ -143,6 +143,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, [tabindex]:fo
 .canvas { position: absolute; inset: 168px 0 0; min-width: 990px; overflow: auto; overscroll-behavior: contain; background-color: #eeece6; background-image: radial-gradient(#c7c8c2 .75px, transparent .75px); background-size: 18px 18px; }
 .canvas::before { content: ""; position: absolute; left: 0; top: 0; width: 1050px; height: 650px; background: radial-gradient(circle at 50% 45%, rgba(255,255,255,.46), transparent 62%); pointer-events: none; }
 .canvas.linking { cursor: crosshair; }
+.canvas.panning, .canvas.panning * { cursor: grabbing !important; }
+.canvas.panning .canvas-world { transition: none; }
 .canvas-label { position: absolute; z-index: 12; left: 82px; top: 24px; display: flex; gap: 10px; align-items: center; color: #a1a49e; }
 .canvas-label span { font-size: 8px; letter-spacing: .16em; font-weight: 800; text-transform: uppercase; }
 .canvas-label small { font-size: 8px; }
@@ -153,7 +155,10 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, [tabindex]:fo
 .section-card.selected::before { content: ""; position: absolute; left: -1px; top: 21px; bottom: 21px; width: 3px; border-radius: 0 4px 4px 0; background: var(--stage); }
 .section-card.dragging { z-index: 20; cursor: grabbing; transform: none; transition: none; box-shadow: 0 24px 55px rgba(39,49,44,.2); }
 .section-topline { display: flex; align-items: center; justify-content: space-between; }
-.section-topline > span { color: var(--stage); font-size: 7px; letter-spacing: .11em; font-weight: 900; text-transform: uppercase; }
+.section-labels { min-width: 0; display: flex; align-items: center; gap: 5px; overflow: hidden; color: #8c928d; font-size: 6px; letter-spacing: .08em; font-weight: 800; text-transform: uppercase; white-space: nowrap; text-overflow: ellipsis; }
+.section-labels b { display: inline-grid; flex: 0 0 auto; min-width: 23px; height: 18px; place-items: center; padding: 0 4px; border-radius: 5px; background: var(--stage); color: white; font-size: 7px; letter-spacing: 0; }
+.section-labels span { color: var(--stage); font-weight: 900; }
+.section-labels i { flex: 0 0 auto; width: 3px; height: 3px; border-radius: 50%; background: #b5b9b4; }
 .owner { width: 22px; height: 22px; border-radius: 7px; display: grid; place-items: center; background: #e9edea; color: #53615b; font-size: 7px; font-weight: 800; }
 .section-card h2 { margin: 6px 0 9px; font-family: Georgia, serif; font-size: 18px; font-weight: 500; letter-spacing: -.025em; }
 .note-stack { display: grid; gap: 4px; min-height: 72px; }
@@ -246,6 +251,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, [tabindex]:fo
 .focus-back span { display: inline-grid; place-items: center; width: 27px; height: 27px; margin-right: 8px; border: 1px solid #dfe0da; border-radius: 8px; background: #faf9f6; color: var(--stage); }
 .focus-title { min-width: 0; }
 .focus-title > span { display: block; color: var(--stage); font-size: 7px; font-weight: 900; letter-spacing: .13em; text-transform: uppercase; }
+.focus-title > span b { display: inline-grid; min-width: 25px; height: 18px; margin-right: 5px; place-items: center; border-radius: 5px; background: var(--stage); color: white; font-size: 7px; letter-spacing: 0; }
 .focus-title h1 { overflow: hidden; margin: 4px 0 0; font-family: Georgia, serif; font-size: 21px; font-weight: 500; letter-spacing: -.025em; white-space: nowrap; text-overflow: ellipsis; }
 .focus-actions { display: flex; gap: 7px; }
 .focus-actions > button { height: 34px; padding: 0 12px; border-radius: 8px; border: 1px solid #dcddd7; background: white; font-size: 8px; font-weight: 800; cursor: pointer; }
@@ -258,6 +264,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, [tabindex]:fo
 .focus-subbar strong { color: #626a64; font-size: 7px; font-weight: 600; }
 .focus-subbar > span { justify-self: end; }
 .focus-canvas { position: relative; overflow: auto; overscroll-behavior: contain; background-color: #eeece6; background-image: radial-gradient(#c5c7c0 .8px, transparent .8px); background-size: 19px 19px; }
+.focus-canvas.panning, .focus-canvas.panning * { cursor: grabbing !important; user-select: none; }
+.focus-canvas.panning .focus-world { transition: none; }
 .focus-world { position: absolute; left: 0; top: 0; width: 1500px; height: 940px; transform-origin: 0 0; transition: transform .12s ease; }
 .focus-prompt { position: absolute; left: 34px; top: 28px; width: min(580px, 48vw); pointer-events: none; }
 .focus-prompt span { color: var(--stage); font-size: 7px; font-weight: 900; letter-spacing: .16em; }
