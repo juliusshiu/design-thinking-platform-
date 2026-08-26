@@ -428,6 +428,16 @@ function apply4DStageTaxonomy(items: Section[]) {
   });
 }
 
+function getTopicPreviewPosition(note: Note, index: number) {
+  const boardX = note.x ?? 86 + (index % 3) * 246;
+  const boardY = note.y ?? 102 + Math.floor(index / 3) * 176;
+
+  return {
+    left: Math.max(8, Math.min(184, (boardX / 1500) * 246)),
+    top: Math.max(8, Math.min(76, (boardY / 940) * 108)),
+  };
+}
+
 export default function Home() {
   const [stage, setStage] = useState<StageId>("discover");
   const [sections, setSections] = useState<Section[]>(DEFAULT_SECTIONS);
@@ -447,6 +457,7 @@ export default function Home() {
   const [savedFeedback, setSavedFeedback] = useState<Record<string, boolean>>({});
   const [toast, setToast] = useState("");
   const [hydrated, setHydrated] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [canvasZoom, setCanvasZoom] = useState(0.82);
   const [canvasPan, setCanvasPan] = useState({ x: 0, y: 0 });
   const [canvasPanning, setCanvasPanning] = useState(false);
@@ -487,6 +498,7 @@ export default function Home() {
 
   useEffect(() => {
     const saved = window.localStorage.getItem("4d-studio-board");
+    setSidebarCollapsed(window.localStorage.getItem("4d-studio-sidebar-collapsed") === "true");
     if (saved) {
       try {
         const parsed = JSON.parse(saved) as { sections: Section[]; links: BoardLink[] };
@@ -504,7 +516,8 @@ export default function Home() {
   useEffect(() => {
     if (!hydrated) return;
     window.localStorage.setItem("4d-studio-board", JSON.stringify({ sections, links }));
-  }, [sections, links, hydrated]);
+    window.localStorage.setItem("4d-studio-sidebar-collapsed", String(sidebarCollapsed));
+  }, [sections, links, sidebarCollapsed, hydrated]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -861,7 +874,7 @@ export default function Home() {
   const progress = Math.round((stageSections.filter((section) => ["Reviewed", "Accepted"].includes(section.status)).length / Math.max(stageSections.length, 1)) * 100);
 
   return (
-    <main className="studio-shell" style={{ "--stage": stageMeta.color, "--stage-soft": stageMeta.soft } as React.CSSProperties}>
+    <main className={`studio-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`} style={{ "--stage": stageMeta.color, "--stage-soft": stageMeta.soft } as React.CSSProperties}>
       <header className="topbar">
         <div className="brand-lockup">
           <div className="brand-mark" aria-hidden="true"><span>4</span><span>D</span></div>
@@ -887,6 +900,14 @@ export default function Home() {
       </header>
 
       <aside className="stage-rail" aria-label="Design stages">
+        <button
+          className="rail-collapse"
+          onClick={() => setSidebarCollapsed((value) => !value)}
+          aria-label={sidebarCollapsed ? "Expand stage sidebar" : "Collapse stage sidebar"}
+          title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          <span>{sidebarCollapsed ? "→" : "←"}</span><small>Collapse</small>
+        </button>
         <div className="project-mini">
           <span>PROJECT</span>
           <strong>Public pause spaces</strong>
@@ -975,10 +996,10 @@ export default function Home() {
               const from = stageSections.find((section) => section.id === link.from);
               const to = stageSections.find((section) => section.id === link.to);
               if (!from || !to) return null;
-              const x1 = from.x + 224;
-              const y1 = from.y + 80;
+              const x1 = from.x + 286;
+              const y1 = from.y + 118;
               const x2 = to.x;
-              const y2 = to.y + 80;
+              const y2 = to.y + 118;
               const width = Math.hypot(x2 - x1, y2 - y1);
               const angle = Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI;
               return (
@@ -990,7 +1011,7 @@ export default function Home() {
             {visibleSections.map((section) => (
               <article
                 key={section.id}
-                className={`section-card ${selected?.id === section.id ? "selected" : ""} ${draggingSectionId === section.id ? "dragging" : ""}`}
+                className={`section-card topic-board ${selected?.id === section.id ? "selected" : ""} ${draggingSectionId === section.id ? "dragging" : ""}`}
                 style={{ left: section.x, top: section.y }}
                 onClick={() => chooseSection(section)}
                 onDoubleClick={() => openSectionFocus(section)}
@@ -1004,21 +1025,42 @@ export default function Home() {
                   if (event.key === " ") chooseSection(section);
                 }}
               >
-                <div className="section-topline">
-                  <div className="section-labels"><b>{STAGES[section.stage].index}</b><span>{STAGES[section.stage].name}</span><i />{section.eyebrow}</div>
-                  <div className="owner">{section.owner}</div>
+                <div className="topic-board-header">
+                  <div className="topic-board-title">
+                    <div className="section-labels"><b>{STAGES[section.stage].index}</b><span>{STAGES[section.stage].name}</span><i />{section.eyebrow}</div>
+                    <h2>{section.title}</h2>
+                  </div>
+                  <button
+                    className="topic-expand"
+                    aria-label={`Expand ${section.title} board`}
+                    title="Expand board"
+                    onClick={(event) => { event.stopPropagation(); openSectionFocus(section); }}
+                  >↗</button>
                 </div>
-                <h2>{section.title}</h2>
-                <div className="note-stack">
-                  {section.notes.slice(0, 3).map((note) => <span key={note.id} className={`mini-note ${note.kind}`}>{note.text}</span>)}
-                  {section.notes.length === 0 && <span className="empty-note">Add the first thought →</span>}
+                <div className="mini-board-preview" aria-label={`${section.title} board preview`}>
+                  <div className="mini-board-origin"><span>BOARD</span><i /></div>
+                  {section.notes.slice(0, 12).map((note, index) => {
+                    const previewPosition = getTopicPreviewPosition(note, index);
+                    return (
+                      <span
+                        key={note.id}
+                        className={`mini-board-item ${note.kind}`}
+                        style={{ left: previewPosition.left, top: previewPosition.top }}
+                        title={note.text || `Empty ${note.kind}`}
+                      >
+                        {note.text || `New ${note.kind}`}
+                      </span>
+                    );
+                  })}
+                  {section.notes.length === 0 && <span className="mini-board-empty">Double-click to open this board and add your first idea</span>}
+                  {section.notes.length > 12 && <span className="mini-board-overflow">+{section.notes.length - 12}</span>}
                 </div>
                 <footer>
                   <span className={`status-dot ${section.status.toLowerCase().replaceAll(" ", "-")}`} />
                   <span>{section.status}</span>
+                  <span className="topic-item-count">{section.notes.length} items</span>
                   <div className="card-actions">
                     <button aria-label={`Add note to ${section.title}`} title="Add note" onClick={(event) => { event.stopPropagation(); setSelectedId(section.id); setComposer("note"); }}>＋</button>
-                    <button aria-label={`Open ${section.title} workspace`} title="Open node workspace" onClick={(event) => { event.stopPropagation(); openSectionFocus(section); }}>↗</button>
                   </div>
                 </footer>
               </article>
