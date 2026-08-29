@@ -21,6 +21,8 @@ type Section = {
   status: "In progress" | "Ready for review" | "Reviewed" | "Accepted" | "Archived";
   x: number;
   y: number;
+  width?: number;
+  height?: number;
   owner: string;
   tags: string[];
   notes: Note[];
@@ -433,8 +435,8 @@ function getTopicPreviewPosition(note: Note, index: number) {
   const boardY = note.y ?? 102 + Math.floor(index / 3) * 176;
 
   return {
-    left: Math.max(8, Math.min(184, (boardX / 1500) * 246)),
-    top: Math.max(8, Math.min(76, (boardY / 940) * 108)),
+    left: `${Math.max(4, Math.min(72, (boardX / 1500) * 100))}%`,
+    top: `${Math.max(7, Math.min(66, (boardY / 940) * 100))}%`,
   };
 }
 
@@ -458,16 +460,19 @@ export default function Home() {
   const [toast, setToast] = useState("");
   const [hydrated, setHydrated] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [criticCollapsed, setCriticCollapsed] = useState(false);
   const [canvasZoom, setCanvasZoom] = useState(0.82);
   const [canvasPan, setCanvasPan] = useState({ x: 0, y: 0 });
   const [canvasPanning, setCanvasPanning] = useState(false);
   const [draggingSectionId, setDraggingSectionId] = useState<string | null>(null);
+  const [resizingSectionId, setResizingSectionId] = useState<string | null>(null);
   const [focusSectionId, setFocusSectionId] = useState<string | null>(null);
   const [focusZoom, setFocusZoom] = useState(1);
   const [focusPan, setFocusPan] = useState({ x: 0, y: 0 });
   const [focusPanning, setFocusPanning] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const sectionDrag = useRef<{ id: string; startX: number; startY: number; originX: number; originY: number } | null>(null);
+  const sectionResize = useRef<{ id: string; startX: number; startY: number; originWidth: number; originHeight: number } | null>(null);
   const sectionDragMoved = useRef(false);
   const noteDrag = useRef<{ sectionId: string; noteId: string; startX: number; startY: number; originX: number; originY: number } | null>(null);
   const canvasPanDrag = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
@@ -499,6 +504,7 @@ export default function Home() {
   useEffect(() => {
     const saved = window.localStorage.getItem("4d-studio-board");
     setSidebarCollapsed(window.localStorage.getItem("4d-studio-sidebar-collapsed") === "true");
+    setCriticCollapsed(window.localStorage.getItem("4d-studio-critic-collapsed") === "true");
     if (saved) {
       try {
         const parsed = JSON.parse(saved) as { sections: Section[]; links: BoardLink[] };
@@ -517,7 +523,8 @@ export default function Home() {
     if (!hydrated) return;
     window.localStorage.setItem("4d-studio-board", JSON.stringify({ sections, links }));
     window.localStorage.setItem("4d-studio-sidebar-collapsed", String(sidebarCollapsed));
-  }, [sections, links, sidebarCollapsed, hydrated]);
+    window.localStorage.setItem("4d-studio-critic-collapsed", String(criticCollapsed));
+  }, [sections, links, sidebarCollapsed, criticCollapsed, hydrated]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -602,6 +609,38 @@ export default function Home() {
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
     sectionDrag.current = null;
     setDraggingSectionId(null);
+  };
+
+  const beginSectionResize = (event: React.PointerEvent<HTMLButtonElement>, section: Section) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    sectionResize.current = {
+      id: section.id,
+      startX: event.clientX,
+      startY: event.clientY,
+      originWidth: section.width ?? 286,
+      originHeight: section.height ?? 236,
+    };
+    setResizingSectionId(section.id);
+    setSelectedId(section.id);
+  };
+
+  const moveSectionResize = (event: React.PointerEvent<HTMLButtonElement>) => {
+    const resize = sectionResize.current;
+    if (!resize) return;
+    const width = Math.min(540, Math.max(240, resize.originWidth + (event.clientX - resize.startX) / canvasZoom));
+    const height = Math.min(460, Math.max(210, resize.originHeight + (event.clientY - resize.startY) / canvasZoom));
+    setSections((current) => current.map((section) => section.id === resize.id ? { ...section, width, height } : section));
+  };
+
+  const endSectionResize = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (!sectionResize.current) return;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    sectionResize.current = null;
+    setResizingSectionId(null);
+    notify("Topic board size saved");
   };
 
   const zoomBoard = (amount: number) => {
@@ -874,7 +913,7 @@ export default function Home() {
   const progress = Math.round((stageSections.filter((section) => ["Reviewed", "Accepted"].includes(section.status)).length / Math.max(stageSections.length, 1)) * 100);
 
   return (
-    <main className={`studio-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`} style={{ "--stage": stageMeta.color, "--stage-soft": stageMeta.soft } as React.CSSProperties}>
+    <main className={`studio-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${criticCollapsed ? "critic-collapsed" : ""}`} style={{ "--stage": stageMeta.color, "--stage-soft": stageMeta.soft } as React.CSSProperties}>
       <header className="topbar">
         <div className="brand-lockup">
           <div className="brand-mark" aria-hidden="true"><span>4</span><span>D</span></div>
@@ -996,10 +1035,10 @@ export default function Home() {
               const from = stageSections.find((section) => section.id === link.from);
               const to = stageSections.find((section) => section.id === link.to);
               if (!from || !to) return null;
-              const x1 = from.x + 286;
-              const y1 = from.y + 118;
+              const x1 = from.x + (from.width ?? 286);
+              const y1 = from.y + (from.height ?? 236) / 2;
               const x2 = to.x;
-              const y2 = to.y + 118;
+              const y2 = to.y + (to.height ?? 236) / 2;
               const width = Math.hypot(x2 - x1, y2 - y1);
               const angle = Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI;
               return (
@@ -1011,8 +1050,8 @@ export default function Home() {
             {visibleSections.map((section) => (
               <article
                 key={section.id}
-                className={`section-card topic-board ${selected?.id === section.id ? "selected" : ""} ${draggingSectionId === section.id ? "dragging" : ""}`}
-                style={{ left: section.x, top: section.y }}
+                className={`section-card topic-board ${selected?.id === section.id ? "selected" : ""} ${draggingSectionId === section.id ? "dragging" : ""} ${resizingSectionId === section.id ? "resizing" : ""}`}
+                style={{ left: section.x, top: section.y, width: section.width ?? 286, height: section.height ?? 236 }}
                 onClick={() => chooseSection(section)}
                 onDoubleClick={() => openSectionFocus(section)}
                 onPointerDown={(event) => beginSectionDrag(event, section)}
@@ -1063,6 +1102,16 @@ export default function Home() {
                     <button aria-label={`Add note to ${section.title}`} title="Add note" onClick={(event) => { event.stopPropagation(); setSelectedId(section.id); setComposer("note"); }}>＋</button>
                   </div>
                 </footer>
+                <button
+                  className="topic-resize-handle"
+                  aria-label={`Resize ${section.title} board`}
+                  title="Drag to resize topic board"
+                  onPointerDown={(event) => beginSectionResize(event, section)}
+                  onPointerMove={moveSectionResize}
+                  onPointerUp={endSectionResize}
+                  onPointerCancel={endSectionResize}
+                  onDoubleClick={(event) => event.stopPropagation()}
+                />
               </article>
             ))}
             {visibleSections.length === 0 && <div className="empty-search">No sections match “{search}” in {stageMeta.name}.</div>}
@@ -1091,11 +1140,15 @@ export default function Home() {
         )}
       </section>
 
-      <aside className="critic-panel" aria-label="AI critic">
+      <aside className={`critic-panel ${criticCollapsed ? "collapsed" : ""}`} aria-label={`${stageMeta.name} AI critic`}>
         <header>
           <div className="critic-orb"><span>✦</span><i /></div>
           <div><span>{stageMeta.name.toUpperCase()} AGENT</span><h2>{stageMeta.critic}</h2></div>
-          <button aria-label="Collapse critic" onClick={() => notify("The critic stays beside your selected section")}>•••</button>
+          <button
+            aria-label={criticCollapsed ? `Expand ${stageMeta.name} agent` : `Collapse ${stageMeta.name} agent`}
+            title={criticCollapsed ? "Expand AI critic" : "Collapse AI critic"}
+            onClick={() => setCriticCollapsed((value) => !value)}
+          >{criticCollapsed ? "←" : "→"}</button>
         </header>
         <div className="critic-scope">
           <span>Reviewing</span>
