@@ -45,6 +45,7 @@ const STAGES: Record<StageId, {
   prompt: string;
   critic: string;
   mindset: string;
+  checkpoint: string;
 }> = {
   discover: {
     index: "D1",
@@ -55,6 +56,7 @@ const STAGES: Record<StageId, {
     prompt: "Understand people, context and unmet needs before deciding what to build.",
     critic: "Research & Empathy Critic",
     mindset: "with empathy",
+    checkpoint: "Separate what people did from what we think it means.",
   },
   define: {
     index: "D2",
@@ -65,6 +67,7 @@ const STAGES: Record<StageId, {
     prompt: "Turn evidence into a focused opportunity, clear principles and measurable outcomes.",
     critic: "Framing & Synthesis Critic",
     mindset: "with mindfulness",
+    checkpoint: "Keep every insight traceable to more than one signal.",
   },
   develop: {
     index: "D3",
@@ -75,6 +78,7 @@ const STAGES: Record<StageId, {
     prompt: "Generate distinct directions, compare trade-offs and choose what is worth testing.",
     critic: "Ideation & Concept Critic",
     mindset: "with joyfulness",
+    checkpoint: "Make space for genuinely different directions before choosing.",
   },
   deliver: {
     index: "D4",
@@ -85,6 +89,7 @@ const STAGES: Record<StageId, {
     prompt: "Prototype, test and iterate without becoming attached to the first answer.",
     critic: "Prototype & Validation Critic",
     mindset: "with non-attachment",
+    checkpoint: "Design each test around one learning question, not approval.",
   },
 };
 
@@ -471,6 +476,9 @@ export default function Home() {
   const [focusPan, setFocusPan] = useState({ x: 0, y: 0 });
   const [focusPanning, setFocusPanning] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [spacePanReady, setSpacePanReady] = useState(false);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const spacePan = useRef(false);
   const sectionDrag = useRef<{ id: string; startX: number; startY: number; originX: number; originY: number } | null>(null);
   const sectionResize = useRef<{ id: string; startX: number; startY: number; originWidth: number; originHeight: number } | null>(null);
   const sectionDragMoved = useRef(false);
@@ -528,6 +536,17 @@ export default function Home() {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const isTyping = Boolean(target?.closest("input, textarea, [contenteditable='true']"));
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        searchRef.current?.focus();
+        searchRef.current?.select();
+      }
+      if (event.key === " " && !isTyping) {
+        spacePan.current = true;
+        setSpacePanReady(true);
+      }
       if (event.key === "Escape") {
         setComposer(null);
         setShowSectionModal(false);
@@ -536,8 +555,18 @@ export default function Home() {
         setFocusSectionId(null);
       }
     };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.key === " ") {
+        spacePan.current = false;
+        setSpacePanReady(false);
+      }
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keyup", onKeyUp);
+    };
   }, []);
 
   useEffect(() => {
@@ -660,7 +689,8 @@ export default function Home() {
   };
 
   const beginCanvasPan = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 2) return;
+    const canPan = event.button === 2 || event.button === 1 || (event.button === 0 && spacePan.current);
+    if (!canPan) return;
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
     canvasPanDrag.current = {
@@ -701,7 +731,8 @@ export default function Home() {
   };
 
   const beginFocusPan = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 2) return;
+    const canPan = event.button === 2 || event.button === 1 || (event.button === 0 && spacePan.current);
+    if (!canPan) return;
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
     focusPanDrag.current = {
@@ -910,6 +941,15 @@ export default function Home() {
     notify("Markdown process report exported");
   };
 
+  const shareProject = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      notify("Review link copied — ready to share");
+    } catch {
+      notify("Your review link is ready in the address bar");
+    }
+  };
+
   const progress = Math.round((stageSections.filter((section) => ["Reviewed", "Accepted"].includes(section.status)).length / Math.max(stageSections.length, 1)) * 100);
 
   return (
@@ -918,13 +958,13 @@ export default function Home() {
         <div className="brand-lockup">
           <div className="brand-mark" aria-hidden="true"><span>4</span><span>D</span></div>
           <div>
-            <div className="brand-name">Design Studio</div>
+            <div className="brand-name">4D Design Studio</div>
             <div className="project-switch">Fieldwork Sprint <span>⌄</span></div>
           </div>
         </div>
         <label className="global-search">
           <span aria-hidden="true">⌕</span>
-          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search this stage" aria-label="Search sections" />
+          <input ref={searchRef} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search sections, notes and evidence…" aria-label="Search sections, notes and evidence" />
           <kbd>⌘ K</kbd>
         </label>
         <div className="top-actions">
@@ -933,7 +973,7 @@ export default function Home() {
             <span className="avatar avatar-warm">AL</span>
             <i />
           </div>
-          <button className="button button-quiet" onClick={() => notify("Review link copied to clipboard")}>Share</button>
+          <button className="button button-quiet" onClick={shareProject}>Share</button>
           <button className="button button-dark" onClick={exportProject}>Export <span>↗</span></button>
         </div>
       </header>
@@ -962,6 +1002,7 @@ export default function Home() {
               <button
                 key={key}
                 className={`stage-button ${active ? "active" : ""}`}
+                aria-current={active ? "step" : undefined}
                 style={{ "--item": item.color, "--item-soft": item.soft } as React.CSSProperties}
                 onClick={() => {
                   setStage(key);
@@ -991,15 +1032,19 @@ export default function Home() {
         <header className="workspace-header">
           <div className="stage-title-row">
             <div className="stage-kicker"><span>{stageMeta.index}</span> {stageMeta.name.toUpperCase()}</div>
-            <div className="view-toggle" aria-label="View options">
-              <button className={view === "board" ? "active" : ""} onClick={() => setView("board")}>Board</button>
-              <button className={view === "outline" ? "active" : ""} onClick={() => setView("outline")}>Outline</button>
+            <div className="stage-controls">
+              <span className="save-status"><i /> Saved locally</span>
+              <div className="view-toggle" aria-label="View options">
+                <button aria-pressed={view === "board"} className={view === "board" ? "active" : ""} onClick={() => setView("board")}>Board</button>
+                <button aria-pressed={view === "outline"} className={view === "outline" ? "active" : ""} onClick={() => setView("outline")}>Outline</button>
+              </div>
             </div>
           </div>
           <div className="stage-heading">
             <div>
               <h1>{stageMeta.headline}<span>.</span></h1>
               <p>{stageMeta.prompt}</p>
+              <div className="stage-checkpoint"><i /><strong>Human checkpoint</strong><span>{stageMeta.checkpoint}</span></div>
             </div>
             <div className="stage-health">
               <div className="health-top"><span>Stage readiness</span><strong>{progress}%</strong></div>
@@ -1010,18 +1055,18 @@ export default function Home() {
         </header>
 
         <div className="board-toolbar" aria-label="Board tools">
-          <button className="tool-active" aria-label="Select tool"><span>↖</span><small>Select</small></button>
-          <button onClick={() => selected ? setComposer("note") : notify("Select a section first")}><span>▰</span><small>Note</small></button>
-          <button onClick={() => selected ? setComposer("evidence") : notify("Select a section first")}><span>◈</span><small>Evidence</small></button>
-          <button className={linkMode ? "tool-active" : ""} onClick={beginLink}><span>↗</span><small>Link</small></button>
-          <button onClick={() => selected ? setShowNotebook(true) : notify("Select a section first")}><span>≡</span><small>Notebook</small></button>
+          <button className="tool-active" aria-label="Select and move sections" title="Select and move sections"><span>↖</span><small>Select</small></button>
+          <button title="Add an idea to the selected section" onClick={() => selected ? setComposer("note") : notify("Select a section first")}><span>▰</span><small>Note</small></button>
+          <button title="Add research evidence to the selected section" onClick={() => selected ? setComposer("evidence") : notify("Select a section first")}><span>◈</span><small>Evidence</small></button>
+          <button aria-pressed={linkMode} title="Connect the selected section to another" className={linkMode ? "tool-active" : ""} onClick={beginLink}><span>↗</span><small>Link</small></button>
+          <button title="Open notes and details for the selected section" onClick={() => selected ? setShowNotebook(true) : notify("Select a section first")}><span>≡</span><small>Details</small></button>
           <i />
-          <button onClick={() => setShowSectionModal(true)}><span>＋</span><small>Section</small></button>
+          <button title="Create a new thinking section" onClick={() => setShowSectionModal(true)}><span>＋</span><small>Section</small></button>
         </div>
 
         {view === "board" ? (
           <div
-            className={`canvas ${linkMode ? "linking" : ""} ${canvasPanning ? "panning" : ""}`}
+            className={`canvas ${linkMode ? "linking" : ""} ${canvasPanning ? "panning" : ""} ${spacePanReady ? "pan-ready" : ""}`}
             onWheel={handleCanvasWheel}
             onContextMenu={(event) => event.preventDefault()}
             onPointerDown={beginCanvasPan}
@@ -1029,7 +1074,7 @@ export default function Home() {
             onPointerUp={endCanvasPan}
             onPointerCancel={endCanvasPan}
           >
-            <div className="canvas-label"><span>{stageMeta.name} canvas</span><small>{stageSections.length} thinking sections · autosaved</small></div>
+            <div className="canvas-label"><span>{stageMeta.name} canvas</span><small>{stageSections.length} thinking sections</small><em>Selected: {selected?.title ?? "None"}</em></div>
             <div className="canvas-world" style={{ transform: `translate(${canvasPan.x}px, ${canvasPan.y}px) scale(${canvasZoom})` }}>
             {stageLinks.map((link) => {
               const from = stageSections.find((section) => section.id === link.from);
@@ -1117,7 +1162,7 @@ export default function Home() {
             {visibleSections.length === 0 && <div className="empty-search">No sections match “{search}” in {stageMeta.name}.</div>}
             <button className="add-floating" onClick={() => setShowSectionModal(true)}><span>＋</span> Add thinking section</button>
             </div>
-            <div className="canvas-help"><span>Left-drag a section</span><i />Right-drag to pan<i />Scroll to zoom<i />Double-click to enter</div>
+            <div className="canvas-help"><span>Drag a section to move</span><i /><span>Hold Space + drag to pan</span><i /><span>Scroll to zoom</span><i /><span>Double-click to enter</span></div>
             <div className="zoom-controls">
               <button aria-label="Zoom out" onClick={() => zoomBoard(-0.1)}>−</button>
               <span>{Math.round(canvasZoom * 100)}%</span>
@@ -1143,7 +1188,7 @@ export default function Home() {
       <aside className={`critic-panel ${criticCollapsed ? "collapsed" : ""}`} aria-label={`${stageMeta.name} AI critic`}>
         <header>
           <div className="critic-orb"><span>✦</span><i /></div>
-          <div><span>{stageMeta.name.toUpperCase()} AGENT</span><h2>{stageMeta.critic}</h2></div>
+          <div><span>{stageMeta.name.toUpperCase()} REFLECTION PARTNER</span><h2>{stageMeta.critic}</h2></div>
           <button
             aria-label={criticCollapsed ? `Expand ${stageMeta.name} agent` : `Collapse ${stageMeta.name} agent`}
             title={criticCollapsed ? "Expand AI critic" : "Collapse AI critic"}
@@ -1224,7 +1269,7 @@ export default function Home() {
             <span>{focusSection.notes.length} items</span>
           </div>
           <div
-            className={`focus-canvas ${focusPanning ? "panning" : ""}`}
+            className={`focus-canvas ${focusPanning ? "panning" : ""} ${spacePanReady ? "pan-ready" : ""}`}
             onWheel={handleFocusWheel}
             onContextMenu={(event) => event.preventDefault()}
             onPointerDown={beginFocusPan}
