@@ -459,20 +459,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   overflow: hidden;
   overscroll-behavior: contain;
   background-color: var(--canvas);
-  background-image:
-    linear-gradient(rgba(95, 93, 86, .08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(95, 93, 86, .08) 1px, transparent 1px);
-  background-size: 24px 24px;
-}
-.canvas::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background-image:
-    linear-gradient(rgba(95, 93, 86, .035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(95, 93, 86, .035) 1px, transparent 1px);
-  background-size: 6px 6px;
+  background-image: radial-gradient(#aaa79e .75px, transparent .75px);
+  background-size: 18px 18px;
 }
 .canvas.tool-hand, .canvas.space-pan, .canvas.pan-ready:not(.panning) { cursor: grab; }
 .canvas.panning, .canvas.panning * { cursor: grabbing !important; }
@@ -697,10 +685,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   flex: 1;
   overflow: hidden;
   background-color: #f2f0e9;
-  background-image:
-    linear-gradient(rgba(106,104,96,.07) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(106,104,96,.07) 1px, transparent 1px);
-  background-size: 12px 12px;
+  background-image: radial-gradient(#c1beb5 .6px, transparent .6px);
+  background-size: 10px 10px;
 }
 .mini-board-origin {
   position: absolute;
@@ -1147,10 +1133,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   position: relative;
   overflow: hidden;
   background-color: var(--canvas);
-  background-image:
-    linear-gradient(rgba(95,93,86,.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(95,93,86,.08) 1px, transparent 1px);
-  background-size: 24px 24px;
+  background-image: radial-gradient(#aaa79e .75px, transparent .75px);
+  background-size: 18px 18px;
 }
 .focus-canvas.panning, .focus-canvas.panning * { cursor: grabbing !important; }
 .focus-canvas.panning .focus-world { transition: none; }

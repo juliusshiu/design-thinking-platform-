@@ -55,6 +55,11 @@ test("keeps the canvas interactions and product styling in source", async () => 
   assert.match(css, /Infinite canvas/);
   assert.match(css, /\.section-card\.selected/);
   assert.match(css, /\.critic-panel\.collapsed/);
+  for (const selector of ["canvas", "focus-canvas", "mini-board-preview"]) {
+    const rule = css.match(new RegExp(`\\.${selector} \\{([^}]+)\\}`));
+    assert.match(rule?.[1] ?? "", /background-image: radial-gradient/);
+    assert.doesNotMatch(rule?.[1] ?? "", /linear-gradient/);
+  }
   assert.match(layout, /og-canvas\.png/);
 
   await assert.rejects(
