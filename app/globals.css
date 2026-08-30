@@ -1267,20 +1267,23 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   z-index: 120;
   inset: 0;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
   background: rgba(25,25,22,.34);
 }
 .focus-space ~ .notebook-backdrop { z-index: 130; }
+.notebook-backdrop { padding: 28px 24px; backdrop-filter: blur(3px); }
 .notebook-panel {
-  width: min(900px, calc(100% - 34px));
-  max-height: 82vh;
-  overflow: auto;
+  width: min(960px, 100%);
+  min-height: min(480px, calc(100dvh - 56px));
+  max-height: min(760px, calc(100dvh - 56px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   border: 1px solid var(--line-dark);
-  border-bottom: 0;
-  border-radius: 4px 4px 0 0;
+  border-radius: 8px;
   background: var(--panel);
-  box-shadow: 0 -15px 40px rgba(25,25,22,.17);
+  box-shadow: 0 24px 72px rgba(25,25,22,.24);
 }
 .notebook-panel > header, .compact-modal header {
   display: flex;
@@ -1288,9 +1291,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   justify-content: space-between;
   border-bottom: 1px solid var(--line);
 }
-.notebook-panel > header { min-height: 64px; padding: 13px 20px; }
+.notebook-panel > header { min-height: 80px; flex: 0 0 auto; gap: 18px; padding: 18px 26px; }
 .notebook-panel header span, .compact-modal header span { color: #817f77; font-family: var(--font-geist-mono), monospace; font-size: 7px; }
 .notebook-panel header h2, .compact-modal header h2 { margin: 4px 0 0; font-size: 18px; font-weight: 620; letter-spacing: -.035em; }
+.notebook-panel header h2 { font-size: 22px; overflow-wrap: anywhere; }
+.notebook-panel header span { font-size: 9px; }
 .notebook-panel header button, .compact-modal header button {
   width: 30px;
   height: 30px;
@@ -1299,40 +1304,42 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   background: transparent;
   cursor: pointer;
 }
-.notebook-grid { display: grid; grid-template-columns: 1fr 230px; gap: 24px; padding: 21px; }
-.notebook-main > label { display: block; margin-bottom: 7px; color: #76746d; font-size: 8px; }
+.notebook-panel header button { flex: 0 0 auto; width: 34px; height: 34px; border-radius: 4px; font-size: 19px; }
+.notebook-grid { min-height: 0; flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 28px; padding: 24px 26px 28px; overflow: auto; overscroll-behavior: contain; }
+.notebook-main { min-width: 0; }
+.notebook-main > label { display: block; margin-bottom: 9px; color: #76746d; font-size: 11px; }
 .notebook-main > textarea {
   width: 100%;
-  height: 118px;
+  height: 160px;
   resize: vertical;
-  padding: 12px;
+  padding: 14px;
   border: 1px solid var(--line);
-  border-radius: 2px;
+  border-radius: 4px;
   outline: 0;
   background: #faf8f2;
-  font-size: 10px;
-  line-height: 1.5;
+  font-size: 13px;
+  line-height: 1.6;
 }
 .notebook-main > textarea:focus { border-color: var(--blue); background: #fff; }
-.notebook-subhead { display: flex; align-items: center; justify-content: space-between; margin: 18px 0 8px; }
-.notebook-subhead span { font-size: 10px; font-weight: 620; }
-.notebook-subhead button { border: 0; background: transparent; color: var(--blue); font-size: 8px; cursor: pointer; }
-.editable-notes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.notebook-subhead { display: flex; align-items: center; justify-content: space-between; margin: 22px 0 12px; }
+.notebook-subhead span { font-size: 13px; font-weight: 620; }
+.notebook-subhead button { min-height: 30px; padding: 0 8px; border: 1px solid var(--line); border-radius: 4px; background: transparent; color: var(--blue); font-size: 10px; cursor: pointer; }
+.editable-notes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .editable-note { display: block; overflow: hidden; border: 1px solid #ddd1a1; border-radius: 1px; background: #fff7cf; }
 .editable-note.evidence { border-color: #c8d3eb; background: #edf2ff; }
 .editable-note.assumption { border-color: #e3c6bd; background: #fbe9e4; }
 .editable-note.decision { border-color: #c8ddcb; background: #e8f3e9; }
-.editable-note span { display: block; padding: 6px 8px 0; color: #777269; font-family: var(--font-geist-mono), monospace; font-size: 6px; }
-.editable-note textarea { width: 100%; height: 66px; resize: none; padding: 6px 8px 8px; border: 0; outline: 0; background: transparent; font-size: 8px; line-height: 1.4; }
+.editable-note span { display: block; padding: 10px 11px 0; color: #777269; font-family: var(--font-geist-mono), monospace; font-size: 8px; }
+.editable-note textarea { width: 100%; height: 96px; resize: vertical; padding: 8px 11px 11px; border: 0; outline: 0; background: transparent; font-size: 11px; line-height: 1.55; }
 .notebook-meta { display: grid; align-content: start; gap: 0; border-top: 1px solid var(--line); }
-.notebook-meta > div { padding: 12px 2px; border-bottom: 1px solid var(--line); }
-.notebook-meta > div > span { display: block; color: #85837b; font-family: var(--font-geist-mono), monospace; font-size: 6px; }
-.notebook-meta strong { display: block; margin-top: 5px; font-size: 9px; font-weight: 620; }
-.notebook-meta small { display: block; margin-top: 3px; color: var(--muted); font-size: 7px; }
+.notebook-meta > div { padding: 15px 2px; border-bottom: 1px solid var(--line); }
+.notebook-meta > div > span { display: block; color: #85837b; font-family: var(--font-geist-mono), monospace; font-size: 8px; }
+.notebook-meta strong { display: block; margin-top: 6px; font-size: 12px; font-weight: 620; }
+.notebook-meta small { display: block; margin-top: 4px; color: var(--muted); font-size: 10px; }
 .notebook-meta p { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0 0; }
-.notebook-meta i { padding: 3px 5px; border: 1px solid var(--line); border-radius: 2px; color: #66645e; font-size: 6px; font-style: normal; }
-.archive { margin-top: 16px; height: 31px; border: 1px solid #dab4ac; border-radius: 2px; background: transparent; color: var(--red); font-size: 8px; cursor: pointer; }
-.modal-backdrop { align-items: center; }
+.notebook-meta i { padding: 4px 7px; border: 1px solid var(--line); border-radius: 3px; color: #66645e; font-size: 9px; font-style: normal; overflow-wrap: anywhere; }
+.archive { margin-top: 20px; height: 34px; border: 1px solid #dab4ac; border-radius: 3px; background: transparent; color: var(--red); font-size: 10px; cursor: pointer; }
+.modal-backdrop { align-items: center; z-index: 140; }
 .compact-modal {
   width: min(420px, calc(100% - 28px));
   padding: 0 17px 17px;
@@ -1461,6 +1468,10 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   .focus-actions { grid-column: 1; grid-row: 2; justify-self: end; }
   .focus-actions > button { height: 27px; padding: 0 7px; }
   .focus-legend { display: none; }
-  .notebook-grid { grid-template-columns: 1fr; }
+  .notebook-backdrop { padding: 12px; }
+  .notebook-panel { min-height: 0; max-height: calc(100dvh - 24px); }
+  .notebook-panel > header { min-height: 72px; padding: 15px 18px; }
+  .notebook-panel header h2 { font-size: 19px; }
+  .notebook-grid { grid-template-columns: 1fr; padding: 18px; gap: 22px; }
   .editable-notes { grid-template-columns: 1fr; }
 }

@@ -88,6 +88,29 @@ test("keeps the canvas interactions and product styling in source", async () => 
   );
 });
 
+test("section details uses a centred, viewport-sized panel with scrollable content", async () => {
+  const [css, page] = await Promise.all([
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+  ]);
+  const backdrop = css.match(/\.notebook-backdrop, \.modal-backdrop \{([^}]+)\}/)?.[1] ?? "";
+  const panel = css.match(/\.notebook-panel \{([^}]+)\}/)?.[1] ?? "";
+  const content = css.match(/\.notebook-grid \{([^}]+)\}/)?.[1] ?? "";
+  assert.match(backdrop, /align-items: center/);
+  assert.match(backdrop, /justify-content: center/);
+  assert.match(panel, /max-height: min\(760px, calc\(100dvh - 56px\)\)/);
+  assert.match(panel, /flex-direction: column/);
+  assert.match(panel, /overflow: hidden/);
+  assert.match(panel, /border-radius: 8px/);
+  assert.match(content, /min-height: 0/);
+  assert.match(content, /overflow: auto/);
+  assert.match(css, /\.modal-backdrop \{[^}]*z-index: 140/);
+  assert.match(css, /\.focus-space ~ \.notebook-backdrop \{ z-index: 130/);
+  assert.match(page, /aria-label="Close details"/);
+  assert.match(page, /<label htmlFor="section-reflection">/);
+  assert.match(page, /<textarea id="section-reflection"/);
+});
+
 test("note frame drags do not steal text editing or canvas panning", () => {
   const pointer = {
     button: 0,

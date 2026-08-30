@@ -1456,15 +1456,15 @@ export default function Home() {
 
       {showNotebook && selected && (
         <div className="notebook-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target) setShowNotebook(false); }}>
-          <section className="notebook-panel" aria-label={`${selected.title} notebook`}>
+          <section className="notebook-panel" aria-label={`${selected.title} details`}>
             <header>
-              <div><span>SECTION NOTEBOOK</span><h2>{selected.title}</h2></div>
-              <button onClick={() => setShowNotebook(false)} aria-label="Close notebook">×</button>
+              <div><span>SECTION DETAILS</span><h2>{selected.title}</h2></div>
+              <button onClick={() => setShowNotebook(false)} aria-label="Close details">×</button>
             </header>
             <div className="notebook-grid">
               <div className="notebook-main">
-                <label>Purpose, method and reflection</label>
-                <textarea value={selected.notebook} onChange={(event) => updateNotebook(event.target.value)} />
+                <label htmlFor="section-reflection">Purpose, method and reflection</label>
+                <textarea id="section-reflection" value={selected.notebook} onChange={(event) => updateNotebook(event.target.value)} />
                 <div className="notebook-subhead"><span>Board items</span><button onClick={() => setComposer("note")}>＋ Add item</button></div>
                 <div className="editable-notes">
                   {selected.notes.map((note) => (
