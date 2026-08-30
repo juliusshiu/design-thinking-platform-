@@ -50,8 +50,8 @@ const STAGES: Record<StageId, {
   discover: {
     index: "D1",
     name: "Discover",
-    color: "#e95a45",
-    soft: "#fff0eb",
+    color: "#d9553d",
+    soft: "#f8e5df",
     headline: "Open the opportunity space",
     prompt: "Understand people, context and unmet needs before deciding what to build.",
     critic: "Research & Empathy Critic",
@@ -61,8 +61,8 @@ const STAGES: Record<StageId, {
   define: {
     index: "D2",
     name: "Define",
-    color: "#e9a327",
-    soft: "#fff5dc",
+    color: "#c68a15",
+    soft: "#f4ead2",
     headline: "Frame what truly matters",
     prompt: "Turn evidence into a focused opportunity, clear principles and measurable outcomes.",
     critic: "Framing & Synthesis Critic",
@@ -72,8 +72,8 @@ const STAGES: Record<StageId, {
   develop: {
     index: "D3",
     name: "Develop",
-    color: "#65aa58",
-    soft: "#eef8e9",
+    color: "#3f8a5b",
+    soft: "#dfecdf",
     headline: "Explore the solution space",
     prompt: "Generate distinct directions, compare trade-offs and choose what is worth testing.",
     critic: "Ideation & Concept Critic",
@@ -83,8 +83,8 @@ const STAGES: Record<StageId, {
   deliver: {
     index: "D4",
     name: "Deliver",
-    color: "#4297cf",
-    soft: "#e9f5fc",
+    color: "#3b7cc0",
+    soft: "#e0eaf3",
     headline: "Learn through making",
     prompt: "Prototype, test and iterate without becoming attached to the first answer.",
     critic: "Prototype & Validation Critic",
@@ -1026,7 +1026,7 @@ export default function Home() {
         <div className="rail-footer">
           <button onClick={() => notify("Activity: 14 edits, 3 comments, 2 reviews this week")}><span>↻</span> Activity</button>
           <button onClick={() => notify("Project settings are ready for your team") }><span>⚙</span> Project settings</button>
-          <div className="human-led"><i /><span><strong>Human-led</strong>AI-assisted process</span></div>
+          <div className="human-led"><i /><span><strong>Human-led</strong>Preset stage review</span></div>
         </div>
       </aside>
 
@@ -1192,13 +1192,13 @@ export default function Home() {
         )}
       </section>
 
-      <aside className={`critic-panel ${criticCollapsed ? "collapsed" : ""}`} aria-label={`${stageMeta.name} AI critic`}>
+      <aside className={`critic-panel ${criticCollapsed ? "collapsed" : ""}`} aria-label={`${stageMeta.name} stage review`}>
         <header>
-          <div className="critic-orb"><span>✦</span><i /></div>
-          <div><span>{stageMeta.name.toUpperCase()} REFLECTION PARTNER <em>PRESET</em></span><h2>{stageMeta.critic}</h2></div>
+          <div className="critic-orb"><span>4D</span><i /></div>
+          <div><span>{stageMeta.name} review <em>PRESET RUBRIC</em></span><h2>{stageMeta.critic}</h2></div>
           <button
-            aria-label={criticCollapsed ? `Expand ${stageMeta.name} agent` : `Collapse ${stageMeta.name} agent`}
-            title={criticCollapsed ? "Expand AI critic" : "Collapse AI critic"}
+            aria-label={criticCollapsed ? `Expand ${stageMeta.name} review` : `Collapse ${stageMeta.name} review`}
+            title={criticCollapsed ? "Expand stage review" : "Collapse stage review"}
             onClick={() => setCriticCollapsed((value) => !value)}
           >{criticCollapsed ? "←" : "→"}</button>
         </header>
@@ -1210,10 +1210,10 @@ export default function Home() {
 
         {!critiqueReady && !critiqueBusy && (
           <div className="critique-empty">
-            <div>✦</div>
+            <div>4D</div>
             <h3>Ready for a fresh look</h3>
             <p>Review this section against the {stageMeta.name} stage, its linked evidence and the project brief.</p>
-            <button onClick={runCritique}>Run section critique <span>→</span></button>
+            <button onClick={runCritique}>Run preset review <span>→</span></button>
           </div>
         )}
 
@@ -1228,7 +1228,7 @@ export default function Home() {
         {critiqueReady && !critiqueBusy && (
           <div className="critique-content">
             <div className="readiness-card">
-              <div><span>READINESS SIGNAL</span><strong>Nearly ready</strong></div>
+              <div><span>Stage readiness</span><strong>Nearly ready</strong></div>
               <div className="readiness-score">74</div>
               <p>Strong behavioral evidence. One key assumption needs a direct research check.</p>
             </div>
@@ -1238,7 +1238,7 @@ export default function Home() {
             <CritiqueCard number="03" kind="question" title="Question for the team" text={CRITIQUES[stage].question} />
 
             <div className="next-action">
-              <span>NEXT BEST ACTION</span>
+              <span>Recommended next step</span>
               <p>{CRITIQUES[stage].action}</p>
               <button
                 className={savedFeedback[stage] ? "saved" : ""}
@@ -1251,7 +1251,7 @@ export default function Home() {
               </button>
             </div>
             <button className="rerun" onClick={runCritique}>↻ Review latest changes</button>
-            <p className="critic-note">AI feedback is advisory. Your team decides what to accept and when to move forward.</p>
+            <p className="critic-note">This preset review applies stage-specific 4D rules. Your team decides what to accept and when to move forward.</p>
           </div>
         )}
       </aside>

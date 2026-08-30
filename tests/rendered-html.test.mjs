@@ -36,7 +36,7 @@ test("server-renders the 4D canvas workspace", async () => {
   assert.match(html, /Open the opportunity space/);
   assert.match(html, /Discover<!-- --> canvas/);
   assert.match(html, /Research questions/);
-  assert.match(html, /aria-label="Discover AI critic"/);
+  assert.match(html, /aria-label="Discover stage review"/);
   assert.match(html, /og-canvas\.png/);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/i);
 });
@@ -52,7 +52,7 @@ test("keeps the canvas interactions and product styling in source", async () => 
   assert.match(page, /beginCanvasPan/);
   assert.match(page, /topic-resize-handle/);
   assert.match(page, /criticCollapsed/);
-  assert.match(css, /Canvas-first workspace/);
+  assert.match(css, /Infinite canvas/);
   assert.match(css, /\.section-card\.selected/);
   assert.match(css, /\.critic-panel\.collapsed/);
   assert.match(layout, /og-canvas\.png/);
