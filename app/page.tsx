@@ -447,6 +447,8 @@ export default function Home() {
   const [selectedId, setSelectedId] = useState("site-analysis");
   const [search, setSearch] = useState("");
   const [view, setView] = useState<"board" | "outline">("board");
+  const [canvasTool, setCanvasTool] = useState<"select" | "hand">("select");
+  const [spacePressed, setSpacePressed] = useState(false);
   const [showNotebook, setShowNotebook] = useState(false);
   const [showSectionModal, setShowSectionModal] = useState(false);
   const [composer, setComposer] = useState<NoteKind | null>(null);
@@ -477,6 +479,7 @@ export default function Home() {
   const noteDrag = useRef<{ sectionId: string; noteId: string; startX: number; startY: number; originX: number; originY: number } | null>(null);
   const canvasPanDrag = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
   const focusPanDrag = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
+  const searchInput = useRef<HTMLInputElement | null>(null);
 
   const stageMeta = STAGES[stage];
   const stageSections = useMemo(
@@ -528,6 +531,18 @@ export default function Home() {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const typing = target?.matches("input, textarea, [contenteditable='true']");
+      if (!typing && event.code === "Space") {
+        event.preventDefault();
+        setSpacePressed(true);
+      }
+      if (!typing && event.key.toLowerCase() === "v") setCanvasTool("select");
+      if (!typing && event.key.toLowerCase() === "h") setCanvasTool("hand");
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        searchInput.current?.focus();
+      }
       if (event.key === "Escape") {
         setComposer(null);
         setShowSectionModal(false);
@@ -536,8 +551,15 @@ export default function Home() {
         setFocusSectionId(null);
       }
     };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.code === "Space") setSpacePressed(false);
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keyup", onKeyUp);
+    };
   }, []);
 
   useEffect(() => {
@@ -579,7 +601,7 @@ export default function Home() {
   };
 
   const beginSectionDrag = (event: React.PointerEvent<HTMLElement>, section: Section) => {
-    if (linkMode || event.button !== 0 || (event.target as HTMLElement).closest("button")) return;
+    if (canvasTool === "hand" || spacePressed || linkMode || event.button !== 0 || (event.target as HTMLElement).closest("button")) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     sectionDrag.current = {
       id: section.id,
@@ -660,7 +682,8 @@ export default function Home() {
   };
 
   const beginCanvasPan = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 2) return;
+    const canPan = event.button === 2 || event.button === 1 || (event.button === 0 && (canvasTool === "hand" || spacePressed));
+    if (!canPan) return;
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
     canvasPanDrag.current = {
@@ -924,9 +947,10 @@ export default function Home() {
         </div>
         <label className="global-search">
           <span aria-hidden="true">⌕</span>
-          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search this stage" aria-label="Search sections" />
-          <kbd>⌘ K</kbd>
+          <input ref={searchInput} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search boards, notes and evidence" aria-label="Search sections" />
+          <kbd>Ctrl K</kbd>
         </label>
+        <div className="save-state"><i /> All changes saved</div>
         <div className="top-actions">
           <div className="presence" aria-label="2 collaborators online">
             <span className="avatar avatar-dark">JS</span>
@@ -953,6 +977,7 @@ export default function Home() {
           <div className="mini-progress"><i style={{ width: "42%" }} /></div>
           <small>Week 4 of 9</small>
         </div>
+        <div className="rail-section-label"><span>4D WORKFLOW</span><button onClick={() => setShowSectionModal(true)} aria-label="Add thinking section">＋</button></div>
         <nav>
           {(Object.keys(STAGES) as StageId[]).map((key) => {
             const item = STAGES[key];
@@ -971,6 +996,7 @@ export default function Home() {
                   setShowNotebook(false);
                   setCanvasZoom(0.82);
                   setCanvasPan({ x: 0, y: 0 });
+                  setCanvasTool("select");
                 }}
               >
                 <span className="stage-number">{complete ? "✓" : item.index}</span>
@@ -1010,7 +1036,13 @@ export default function Home() {
         </header>
 
         <div className="board-toolbar" aria-label="Board tools">
-          <button className="tool-active" aria-label="Select tool"><span>↖</span><small>Select</small></button>
+          <button
+            className={canvasTool === "select" ? "tool-active" : ""}
+            aria-label={canvasTool === "select" ? "Switch to hand tool" : "Switch to select tool"}
+            title={canvasTool === "select" ? "Select tool (V)" : "Hand tool (H)"}
+            onClick={() => setCanvasTool((tool) => tool === "select" ? "hand" : "select")}
+            aria-pressed={canvasTool === "select"}
+          ><span>{canvasTool === "select" ? "↖" : "✋"}</span><small>{canvasTool === "select" ? "Select" : "Hand"}</small></button>
           <button onClick={() => selected ? setComposer("note") : notify("Select a section first")}><span>▰</span><small>Note</small></button>
           <button onClick={() => selected ? setComposer("evidence") : notify("Select a section first")}><span>◈</span><small>Evidence</small></button>
           <button className={linkMode ? "tool-active" : ""} onClick={beginLink}><span>↗</span><small>Link</small></button>
@@ -1021,7 +1053,7 @@ export default function Home() {
 
         {view === "board" ? (
           <div
-            className={`canvas ${linkMode ? "linking" : ""} ${canvasPanning ? "panning" : ""}`}
+            className={`canvas tool-${canvasTool} ${spacePressed ? "space-pan" : ""} ${linkMode ? "linking" : ""} ${canvasPanning ? "panning" : ""}`}
             onWheel={handleCanvasWheel}
             onContextMenu={(event) => event.preventDefault()}
             onPointerDown={beginCanvasPan}
@@ -1117,7 +1149,7 @@ export default function Home() {
             {visibleSections.length === 0 && <div className="empty-search">No sections match “{search}” in {stageMeta.name}.</div>}
             <button className="add-floating" onClick={() => setShowSectionModal(true)}><span>＋</span> Add thinking section</button>
             </div>
-            <div className="canvas-help"><span>Left-drag a section</span><i />Right-drag to pan<i />Scroll to zoom<i />Double-click to enter</div>
+            <div className="canvas-help"><span>V select</span><i />H hand<i />Space or right-drag to pan<i />Scroll to zoom<i />Double-click to open</div>
             <div className="zoom-controls">
               <button aria-label="Zoom out" onClick={() => zoomBoard(-0.1)}>−</button>
               <span>{Math.round(canvasZoom * 100)}%</span>
@@ -1143,7 +1175,7 @@ export default function Home() {
       <aside className={`critic-panel ${criticCollapsed ? "collapsed" : ""}`} aria-label={`${stageMeta.name} AI critic`}>
         <header>
           <div className="critic-orb"><span>✦</span><i /></div>
-          <div><span>{stageMeta.name.toUpperCase()} AGENT</span><h2>{stageMeta.critic}</h2></div>
+          <div><span>{stageMeta.name.toUpperCase()} AGENT <em>PRESET</em></span><h2>{stageMeta.critic}</h2></div>
           <button
             aria-label={criticCollapsed ? `Expand ${stageMeta.name} agent` : `Collapse ${stageMeta.name} agent`}
             title={criticCollapsed ? "Expand AI critic" : "Collapse AI critic"}

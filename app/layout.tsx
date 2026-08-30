@@ -15,11 +15,12 @@ const geistMono = Geist_Mono({
 
 export async function generateMetadata(): Promise<Metadata> {
   const requestHeaders = await headers();
-  const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host") ?? "localhost:3000";
-  const protocol = requestHeaders.get("x-forwarded-proto") ?? (host.includes("localhost") ? "http" : "https");
-  const image = `${protocol}://${host}/og.png`;
-  const title = "4D Design Studio — Human-led, AI-critiqued design thinking";
-  const description = "A collaborative canvas for moving from research and framing to concepts, prototypes and evidence-backed decisions.";
+  const requestHost = requestHeaders.get("host") ?? "";
+  const localOrigin = /^(localhost|127\.0\.0\.1)(:\d+)?$/.test(requestHost) ? `http://${requestHost}` : null;
+  const origin = localOrigin ?? "https://four-d-design-studio.juliusshiu.chatgpt.site";
+  const image = `${origin}/og-canvas.png`;
+  const title = "4D Design Studio — Canvas-first design thinking";
+  const description = "Move from discovery to prototype on one shared canvas, with nested topic boards and stage-specific AI critique.";
 
   return {
     title,
@@ -28,7 +29,7 @@ export async function generateMetadata(): Promise<Metadata> {
       title,
       description,
       type: "website",
-      images: [{ url: image, width: 1728, height: 907, alt: "4D Design Studio — Human-led. AI-critiqued." }],
+      images: [{ url: image, width: 1200, height: 630, alt: "4D Design Studio — From discovery to prototype on one shared canvas." }],
     },
     twitter: {
       card: "summary_large_image",
