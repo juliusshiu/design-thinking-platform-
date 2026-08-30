@@ -20,7 +20,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const origin = localOrigin ?? "https://four-d-design-studio.juliusshiu.chatgpt.site";
   const image = `${origin}/og-canvas.png`;
   const title = "4D Design Studio — Canvas-first design thinking";
-  const description = "Move from discovery to prototype on one shared canvas, with nested topic boards and stage-specific AI critique.";
+  const description = "Move from discovery to prototype on one shared canvas, with nested topic boards and stage-specific preset critique.";
 
   return {
     title,
