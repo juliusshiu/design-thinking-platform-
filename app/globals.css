@@ -813,21 +813,6 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   font-size: 5px;
   transform: translateX(-50%);
 }
-.add-floating {
-  position: absolute;
-  left: 84px;
-  top: 660px;
-  height: 36px;
-  padding: 0 12px;
-  border: 1px dashed #9f9c93;
-  border-radius: 2px;
-  background: rgba(244,242,236,.72);
-  color: #66645e;
-  font-size: 8px;
-  cursor: pointer;
-}
-.add-floating span { margin-right: 5px; }
-.add-floating:hover { color: var(--ink); border-color: var(--ink); background: var(--panel); }
 .empty-search {
   position: absolute;
   left: 84px;

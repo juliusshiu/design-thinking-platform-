@@ -1203,7 +1203,6 @@ export default function Home() {
               </article>
             ))}
             {visibleSections.length === 0 && <div className="empty-search">No sections match “{search}” in {stageMeta.name}.</div>}
-            <button className="add-floating" onClick={() => setShowSectionModal(true)}><span>＋</span> Add thinking section</button>
             </div>
             <div className="canvas-help"><span>V select</span><i /><span>H hand</span><i /><span>Space or right-drag to pan</span><i /><span>Scroll to zoom</span><i /><span>Double-click to open</span></div>
             <div className="zoom-controls">
