@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { access, readFile } from "node:fs/promises";
 import test from "node:test";
+import { canStartNoteDrag, getNoteDragPosition } from "../lib/note-drag.mjs";
 
 const templateRoot = new URL("../", import.meta.url);
 
@@ -52,6 +53,13 @@ test("keeps the canvas interactions and product styling in source", async () => 
   assert.match(page, /beginCanvasPan/);
   assert.match(page, /topic-resize-handle/);
   assert.match(page, /criticCollapsed/);
+  assert.match(page, /onLostPointerCapture=\{endNoteDrag\}/);
+  assert.match(page, /onPointerDown=\{\(event\) => beginNoteDrag\(event, focusSection.id, note, index\)\}/);
+  assert.match(page, /data-note-drag-handle/);
+  assert.match(page, /event.pointerId !== drag.pointerId/);
+  assert.match(css, /\.focus-note\.is-dragging/);
+  assert.match(css, /\.focus-note-edge\.edge-left/);
+  assert.match(css, /\.focus-note-edge\.edge-right/);
   assert.match(css, /Infinite canvas/);
   assert.match(css, /\.section-card\.selected/);
   assert.match(css, /\.critic-panel\.collapsed/);
@@ -65,4 +73,39 @@ test("keeps the canvas interactions and product styling in source", async () => 
   await assert.rejects(
     access(new URL("app/_sites-preview", templateRoot)),
   );
+});
+
+test("note frame drags do not steal text editing or canvas panning", () => {
+  const pointer = {
+    button: 0,
+    isPrimary: true,
+    spacePressed: false,
+    target: { closest: () => null },
+  };
+  assert.equal(canStartNoteDrag(pointer), true, "the note frame and grip can start a drag");
+  for (const button of [1, 2]) {
+    assert.equal(canStartNoteDrag({ ...pointer, button }), false, "middle/right drag belongs to the board");
+  }
+  assert.equal(canStartNoteDrag({ ...pointer, spacePressed: true }), false, "Space + drag pans the board");
+  assert.equal(canStartNoteDrag({ ...pointer, isPrimary: false }), false, "a second touch cannot take over");
+  assert.equal(canStartNoteDrag({
+    ...pointer,
+    target: { closest(selector) {
+      assert.match(selector, /textarea/);
+      assert.match(selector, /input/);
+      assert.match(selector, /contenteditable/);
+      assert.match(selector, /button:not\(\[data-note-drag-handle\]\)/);
+      return {};
+    } },
+  }), false, "editing and action controls are excluded");
+});
+
+test("dragging a note keeps the grab offset at every supported zoom", () => {
+  for (const zoom of [0.55, 1, 1.5]) {
+    const drag = { originX: 250, originY: 180, startX: 417, startY: 301, zoom };
+    assert.deepEqual(getNoteDragPosition(drag, 417, 301), { x: 250, y: 180 });
+    assert.deepEqual(getNoteDragPosition(drag, 417 + 90 * zoom, 301 + 60 * zoom), { x: 340, y: 240 });
+    assert.deepEqual(getNoteDragPosition(drag, 417 - 90 * zoom, 301 - 60 * zoom), { x: 160, y: 120 });
+    assert.deepEqual(getNoteDragPosition(drag, -1000, -1000), { x: 22, y: 52 });
+  }
 });

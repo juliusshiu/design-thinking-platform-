@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { canStartNoteDrag, getNoteDragPosition } from "@/lib/note-drag.mjs";
 
 type StageId = "discover" | "define" | "develop" | "deliver";
 type NoteKind = "note" | "evidence" | "assumption" | "decision";
@@ -478,10 +479,11 @@ export default function Home() {
   const [focusPan, setFocusPan] = useState({ x: 0, y: 0 });
   const [focusPanning, setFocusPanning] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [draggingNoteId, setDraggingNoteId] = useState<string | null>(null);
   const sectionDrag = useRef<{ id: string; startX: number; startY: number; originX: number; originY: number } | null>(null);
   const sectionResize = useRef<{ id: string; startX: number; startY: number; originWidth: number; originHeight: number } | null>(null);
   const sectionDragMoved = useRef(false);
-  const noteDrag = useRef<{ sectionId: string; noteId: string; startX: number; startY: number; originX: number; originY: number } | null>(null);
+  const noteDrag = useRef<{ sectionId: string; noteId: string; pointerId: number; zoom: number; startX: number; startY: number; originX: number; originY: number } | null>(null);
   const canvasPanDrag = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
   const focusPanDrag = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
   const searchInput = useRef<HTMLInputElement | null>(null);
@@ -560,11 +562,18 @@ export default function Home() {
     const onKeyUp = (event: KeyboardEvent) => {
       if (event.code === "Space") setSpacePressed(false);
     };
+    const onBlur = () => {
+      setSpacePressed(false);
+      noteDrag.current = null;
+      setDraggingNoteId(null);
+    };
     window.addEventListener("keydown", onKey);
     window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", onBlur);
     return () => {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onBlur);
     };
   }, []);
 
@@ -719,6 +728,7 @@ export default function Home() {
 
   const handleFocusWheel = (event: React.WheelEvent<HTMLDivElement>) => {
     event.preventDefault();
+    if (noteDrag.current) return;
     const bounds = event.currentTarget.getBoundingClientRect();
     const pointer = { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
     const next = Math.min(1.5, Math.max(0.55, Number((focusZoom + (event.deltaY > 0 ? -0.08 : 0.08)).toFixed(2))));
@@ -832,38 +842,64 @@ export default function Home() {
   };
 
   const beginNoteDrag = (
-    event: React.PointerEvent<HTMLButtonElement>,
+    event: React.PointerEvent<HTMLElement>,
     sectionId: string,
     note: Note,
     index: number,
   ) => {
-    if (event.button !== 0) return;
+    if (noteDrag.current || !canStartNoteDrag({
+      button: event.button,
+      isPrimary: event.isPrimary,
+      spacePressed,
+      target: event.target as Element,
+    })) return;
+    event.preventDefault();
     event.stopPropagation();
+    event.currentTarget.querySelector<HTMLButtonElement>("[data-note-drag-handle]")?.focus({ preventScroll: true });
     event.currentTarget.setPointerCapture(event.pointerId);
     noteDrag.current = {
       sectionId,
       noteId: note.id,
+      pointerId: event.pointerId,
+      zoom: focusZoom,
       startX: event.clientX,
       startY: event.clientY,
       originX: note.x ?? 86 + (index % 3) * 246,
       originY: note.y ?? 102 + Math.floor(index / 3) * 176,
     };
+    setDraggingNoteId(note.id);
   };
 
-  const moveNote = (event: React.PointerEvent<HTMLButtonElement>) => {
+  const moveNote = (event: React.PointerEvent<HTMLElement>) => {
     const drag = noteDrag.current;
-    if (!drag) return;
-    const x = Math.max(22, drag.originX + (event.clientX - drag.startX) / focusZoom);
-    const y = Math.max(52, drag.originY + (event.clientY - drag.startY) / focusZoom);
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    event.stopPropagation();
+    const { x, y } = getNoteDragPosition(drag, event.clientX, event.clientY);
     setSections((current) => current.map((section) => section.id === drag.sectionId
       ? { ...section, notes: section.notes.map((note) => note.id === drag.noteId ? { ...note, x, y } : note) }
       : section));
   };
 
-  const endNoteDrag = (event: React.PointerEvent<HTMLButtonElement>) => {
-    if (!noteDrag.current) return;
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  const endNoteDrag = (event: React.PointerEvent<HTMLElement>) => {
+    if (!noteDrag.current || event.pointerId !== noteDrag.current.pointerId) return;
+    event.stopPropagation();
     noteDrag.current = null;
+    setDraggingNoteId(null);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  };
+
+  const nudgeNote = (event: React.KeyboardEvent<HTMLButtonElement>, sectionId: string, noteId: string, index: number) => {
+    const directions: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+    const direction = directions[event.key];
+    if (!direction) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const step = event.shiftKey ? 40 : 10;
+    setSections((current) => current.map((section) => section.id === sectionId
+      ? { ...section, notes: section.notes.map((note) => note.id === noteId
+          ? { ...note, x: Math.max(22, (note.x ?? 86 + (index % 3) * 246) + direction[0] * step), y: Math.max(52, (note.y ?? 102 + Math.floor(index / 3) * 176) + direction[1] * step) }
+          : note) }
+      : section));
   };
 
   const cycleNoteKind = (sectionId: string, noteId: string) => {
@@ -1272,7 +1308,7 @@ export default function Home() {
           </header>
           <div className="focus-subbar">
             <div><i /> Autosaved locally</div>
-            <strong>Right-drag to pan · scroll to zoom · move notes by their handle · type directly</strong>
+            <strong>Drag any note edge to move · click the text to write · right-drag to pan</strong>
             <span>{focusSection.notes.length} items</span>
           </div>
           <div
@@ -1304,24 +1340,31 @@ export default function Home() {
               {focusSection.notes.map((note, index) => (
                 <article
                   key={note.id}
-                  className={`focus-note ${note.kind}`}
+                  className={`focus-note ${note.kind} ${draggingNoteId === note.id ? "is-dragging" : ""}`}
                   style={{
                     left: note.x ?? 86 + (index % 3) * 246,
                     top: note.y ?? 102 + Math.floor(index / 3) * 176,
                   }}
+                  onPointerDown={(event) => beginNoteDrag(event, focusSection.id, note, index)}
+                  onPointerMove={moveNote}
+                  onPointerUp={endNoteDrag}
+                  onPointerCancel={endNoteDrag}
+                  onLostPointerCapture={endNoteDrag}
                   onDoubleClick={(event) => event.stopPropagation()}
                 >
+                  <span className="focus-note-edge edge-top" aria-hidden="true" />
+                  <span className="focus-note-edge edge-right" aria-hidden="true" />
+                  <span className="focus-note-edge edge-bottom" aria-hidden="true" />
+                  <span className="focus-note-edge edge-left" aria-hidden="true" />
                   <header>
                     <button
                       className="focus-note-handle"
-                      aria-label="Move note"
-                      title="Drag to move"
-                      onPointerDown={(event) => beginNoteDrag(event, focusSection.id, note, index)}
-                      onPointerMove={moveNote}
-                      onPointerUp={endNoteDrag}
-                      onPointerCancel={endNoteDrag}
-                    ><i /><i /><i /></button>
-                    <button className="focus-kind" onClick={() => cycleNoteKind(focusSection.id, note.id)} title="Change item type">{note.kind}</button>
+                      data-note-drag-handle
+                      aria-label={`Move ${note.kind} ${index + 1}; use arrow keys, Shift for larger steps`}
+                      title="Drag any edge to move · Arrow keys to nudge"
+                      onKeyDown={(event) => nudgeNote(event, focusSection.id, note.id, index)}
+                    ><i /><i /><i /><i /><i /><i /></button>
+                    <button className="focus-kind" onClick={() => cycleNoteKind(focusSection.id, note.id)} title="Change item type"><i aria-hidden="true" />{note.kind}<span aria-hidden="true">⌄</span></button>
                     <button className="focus-delete" onClick={() => deleteFreeNote(focusSection.id, note.id)} aria-label="Delete note">×</button>
                   </header>
                   <textarea
@@ -1332,7 +1375,11 @@ export default function Home() {
                     placeholder="Type your idea…"
                     aria-label={`${note.kind} text`}
                   />
-                  <footer><span>{note.text.trim().split(/\s+/).filter(Boolean).length} words</span><span>{focusSection.owner}</span></footer>
+                  <footer>
+                    <span className="focus-note-number">{String(index + 1).padStart(2, "0")}</span>
+                    <span className="focus-note-words">{note.text.trim().split(/\s+/).filter(Boolean).length} words</span>
+                    <span className="focus-note-owner" title={`Owner: ${focusSection.owner}`}>{focusSection.owner}</span>
+                  </footer>
                 </article>
               ))}
               {focusSection.notes.length === 0 && (
