@@ -466,6 +466,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 .canvas.panning, .canvas.panning * { cursor: grabbing !important; }
 .canvas.panning .canvas-world { transition: none; }
 .canvas.linking { cursor: crosshair; }
+.canvas.linking .section-card { cursor: crosshair; }
 .canvas-label {
   position: absolute;
   z-index: 14;

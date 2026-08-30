@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { canStartNoteDrag, getNoteDragPosition } from "@/lib/note-drag.mjs";
+import { evaluateSectionLink } from "@/lib/section-link.mjs";
 
 type StageId = "discover" | "define" | "develop" | "deliver";
 type NoteKind = "note" | "evidence" | "assumption" | "decision";
@@ -544,8 +545,11 @@ export default function Home() {
         event.preventDefault();
         setSpacePressed(true);
       }
-      if (!typing && event.key.toLowerCase() === "v") setCanvasTool("select");
-      if (!typing && event.key.toLowerCase() === "h") setCanvasTool("hand");
+      if (!typing && ["v", "h"].includes(event.key.toLowerCase())) {
+        setLinkMode(false);
+        setLinkSource(null);
+        setCanvasTool(event.key.toLowerCase() === "h" ? "hand" : "select");
+      }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         searchInput.current?.focus();
@@ -555,6 +559,8 @@ export default function Home() {
         setComposer(null);
         setShowSectionModal(false);
         setLinkMode(false);
+        setLinkSource(null);
+        setCanvasTool("select");
         setShowNotebook(false);
         setFocusSectionId(null);
       }
@@ -564,6 +570,8 @@ export default function Home() {
     };
     const onBlur = () => {
       setSpacePressed(false);
+      setLinkMode(false);
+      setLinkSource(null);
       noteDrag.current = null;
       setDraggingNoteId(null);
     };
@@ -588,19 +596,51 @@ export default function Home() {
     window.setTimeout(() => setToast(""), 2600);
   };
 
-  const chooseSection = (section: Section) => {
-    if (sectionDragMoved.current) {
-      sectionDragMoved.current = false;
+  const cancelLink = () => {
+    setLinkMode(false);
+    setLinkSource(null);
+    setCanvasTool("select");
+  };
+
+  const cancelLinkOutsideSection = (event: React.MouseEvent<HTMLElement>) => {
+    if (!linkMode) return;
+    const target = event.target as HTMLElement;
+    const sectionTarget = target.closest("[data-link-section]");
+    const control = target.closest("button, input, textarea, select, a");
+    // Board bodies and outline rows complete their attempt in chooseSection.
+    if (sectionTarget && (!control || control === sectionTarget)) return;
+    cancelLink();
+    if (sectionTarget && control) {
+      event.preventDefault();
+      event.stopPropagation();
+      notify("Link cancelled — back to selection");
       return;
     }
-    if (linkMode && linkSource && linkSource !== section.id) {
-      setLinks((current) => [
-        ...current,
-        { id: makeId("link"), from: linkSource, to: section.id, label: "supports" },
-      ]);
-      setLinkMode(false);
-      setLinkSource(null);
-      notify(`Linked to ${section.title}`);
+    if (target.closest(".canvas") && !control) {
+      notify("Link cancelled — back to selection");
+    }
+  };
+
+  const chooseSection = (section: Section) => {
+    if (linkMode) {
+      const result = evaluateSectionLink({ sourceId: linkSource, targetId: section.id, sections, links });
+      // Every attempt ends link mode, whether it succeeds or not.
+      cancelLink();
+      setSelectedId(section.id);
+      setCritiqueReady(false);
+      if (result === "valid" && linkSource) {
+        setLinks((current) => [
+          ...current,
+          { id: makeId("link"), from: linkSource, to: section.id, label: "supports" },
+        ]);
+        notify(`Linked to ${section.title}`);
+      } else {
+        notify(result === "duplicate" ? "These sections are already linked — back to selection" : "Link cancelled — choose a different section next time");
+      }
+      return;
+    }
+    if (sectionDragMoved.current) {
+      sectionDragMoved.current = false;
       return;
     }
     setSelectedId(section.id);
@@ -608,6 +648,7 @@ export default function Home() {
   };
 
   const openSectionFocus = (section: Section) => {
+    cancelLink();
     setSelectedId(section.id);
     setFocusSectionId(section.id);
     setFocusZoom(1);
@@ -649,7 +690,7 @@ export default function Home() {
   };
 
   const beginSectionResize = (event: React.PointerEvent<HTMLButtonElement>, section: Section) => {
-    if (event.button !== 0) return;
+    if (linkMode || event.button !== 0) return;
     event.preventDefault();
     event.stopPropagation();
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -699,6 +740,7 @@ export default function Home() {
   const beginCanvasPan = (event: React.PointerEvent<HTMLDivElement>) => {
     const canPan = event.button === 2 || event.button === 1 || (event.button === 0 && (canvasTool === "hand" || spacePressed));
     if (!canPan) return;
+    if (linkMode) cancelLink();
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
     canvasPanDrag.current = {
@@ -770,10 +812,16 @@ export default function Home() {
   };
 
   const beginLink = () => {
-    if (!selected) return;
+    if (linkMode || !selected) {
+      cancelLink();
+      if (!selected) notify("Select a section before linking");
+      return;
+    }
+    sectionDragMoved.current = false;
+    setCanvasTool("select");
     setLinkMode(true);
     setLinkSource(selected.id);
-    notify("Choose another section to create a ‘supports’ link");
+    notify("Click a different section to link — click empty canvas to cancel");
   };
 
   const addNote = () => {
@@ -988,7 +1036,7 @@ export default function Home() {
   const progress = Math.round((stageSections.filter((section) => ["Reviewed", "Accepted"].includes(section.status)).length / Math.max(stageSections.length, 1)) * 100);
 
   return (
-    <main className={`studio-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${criticCollapsed ? "critic-collapsed" : ""}`} style={{ "--stage": stageMeta.color, "--stage-soft": stageMeta.soft } as React.CSSProperties}>
+    <main className={`studio-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${criticCollapsed ? "critic-collapsed" : ""}`} style={{ "--stage": stageMeta.color, "--stage-soft": stageMeta.soft } as React.CSSProperties} onClickCapture={cancelLinkOutsideSection}>
       <header className="topbar">
         <div className="brand-lockup">
           <div className="brand-mark" aria-hidden="true"><span>4</span><span>D</span></div>
@@ -1093,18 +1141,18 @@ export default function Home() {
 
         <div className="board-toolbar" aria-label="Board tools">
           <button
-            className={canvasTool === "select" ? "tool-active" : ""}
-            aria-label={canvasTool === "select" ? "Switch to hand tool" : "Switch to select tool"}
+            className={canvasTool === "select" && !linkMode ? "tool-active" : ""}
+            aria-label={linkMode ? "Switch to select tool" : canvasTool === "select" ? "Switch to hand tool" : "Switch to select tool"}
             title={canvasTool === "select" ? "Select tool (V)" : "Hand tool (H)"}
-            onClick={() => setCanvasTool((tool) => tool === "select" ? "hand" : "select")}
-            aria-pressed={canvasTool === "select"}
+            onClick={() => linkMode ? cancelLink() : setCanvasTool((tool) => tool === "select" ? "hand" : "select")}
+            aria-pressed={canvasTool === "select" && !linkMode}
           ><span>{canvasTool === "select" ? "↖" : "✋"}</span><small>{canvasTool === "select" ? "Select" : "Hand"}</small></button>
+          <button title="Create a new thinking section" onClick={() => setShowSectionModal(true)}><span>＋</span><small>Section</small></button>
+          <button aria-pressed={linkMode} title="Connect the selected section to another" className={linkMode ? "tool-active" : ""} onClick={beginLink}><span>↗</span><small>Link</small></button>
+          <i />
           <button title="Add an idea to the selected section" onClick={() => selected ? setComposer("note") : notify("Select a section first")}><span>▰</span><small>Note</small></button>
           <button title="Add research evidence to the selected section" onClick={() => selected ? setComposer("evidence") : notify("Select a section first")}><span>◈</span><small>Evidence</small></button>
-          <button aria-pressed={linkMode} title="Connect the selected section to another" className={linkMode ? "tool-active" : ""} onClick={beginLink}><span>↗</span><small>Link</small></button>
           <button title="Open notes and details for the selected section" onClick={() => selected ? setShowNotebook(true) : notify("Select a section first")}><span>≡</span><small>Details</small></button>
-          <i />
-          <button title="Create a new thinking section" onClick={() => setShowSectionModal(true)}><span>＋</span><small>Section</small></button>
         </div>
 
         {view === "board" ? (
@@ -1138,6 +1186,7 @@ export default function Home() {
             {visibleSections.map((section) => (
               <article
                 key={section.id}
+                data-link-section
                 className={`section-card topic-board ${selected?.id === section.id ? "selected" : ""} ${draggingSectionId === section.id ? "dragging" : ""} ${resizingSectionId === section.id ? "resizing" : ""}`}
                 style={{ left: section.x, top: section.y, width: section.width ?? 286, height: section.height ?? 236 }}
                 onClick={() => chooseSection(section)}
@@ -1148,8 +1197,10 @@ export default function Home() {
                 onPointerCancel={endSectionDrag}
                 tabIndex={0}
                 onKeyDown={(event) => {
-                  if (event.key === "Enter") openSectionFocus(section);
-                  if (event.key === " ") chooseSection(section);
+                  if (event.key !== "Enter" && event.key !== " ") return;
+                  event.preventDefault();
+                  if (linkMode || event.key === " ") chooseSection(section);
+                  else openSectionFocus(section);
                 }}
               >
                 <div className="topic-board-header">
@@ -1216,7 +1267,7 @@ export default function Home() {
           <div className="outline-view">
             <div className="outline-intro"><span>PROCESS OUTLINE</span><strong>{stageMeta.name} evidence and decisions</strong></div>
             {visibleSections.map((section, index) => (
-              <button key={section.id} onClick={() => chooseSection(section)} className={selected?.id === section.id ? "active" : ""}>
+              <button key={section.id} data-link-section onClick={() => chooseSection(section)} className={selected?.id === section.id ? "active" : ""}>
                 <span className="outline-index">{String(index + 1).padStart(2, "0")}</span>
                 <span><strong>{section.title}</strong><small>{section.notebook}</small></span>
                 <span className="outline-count">{section.notes.length} items</span>

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { access, readFile } from "node:fs/promises";
 import test from "node:test";
 import { canStartNoteDrag, getNoteDragPosition } from "../lib/note-drag.mjs";
+import { evaluateSectionLink } from "../lib/section-link.mjs";
 
 const templateRoot = new URL("../", import.meta.url);
 
@@ -40,6 +41,8 @@ test("server-renders the 4D canvas workspace", async () => {
   assert.doesNotMatch(html, /add-floating/);
   assert.match(html, /aria-label="Add thinking section"/);
   assert.match(html, /title="Create a new thinking section"/);
+  const toolbar = html.match(/class="board-toolbar"[^>]*>([\s\S]*?)<\/div>/)?.[1] ?? "";
+  assert.deepEqual([...toolbar.matchAll(/<small>([^<]+)<\/small>/g)].map((match) => match[1]), ["Select", "Section", "Link", "Note", "Evidence", "Details"]);
   assert.match(html, /aria-label="Discover stage review"/);
   assert.match(html, /og-canvas\.png/);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/i);
@@ -56,6 +59,13 @@ test("keeps the canvas interactions and product styling in source", async () => 
   assert.match(page, /beginCanvasPan/);
   assert.match(page, /topic-resize-handle/);
   assert.match(page, /criticCollapsed/);
+  assert.match(page, /onClickCapture=\{cancelLinkOutsideSection\}/);
+  assert.match(page, /data-link-section/);
+  const cancelLink = page.match(/const cancelLink = \(\) => \{([\s\S]*?)\n  \};/)?.[1] ?? "";
+  assert.match(cancelLink, /setLinkMode\(false\)/);
+  assert.match(cancelLink, /setLinkSource\(null\)/);
+  assert.match(cancelLink, /setCanvasTool\("select"\)/);
+  assert.match(page, /const result = evaluateSectionLink[\s\S]*?cancelLink\(\);[\s\S]*?if \(result === "valid"/);
   assert.match(page, /onLostPointerCapture=\{endNoteDrag\}/);
   assert.match(page, /onPointerDown=\{\(event\) => beginNoteDrag\(event, focusSection.id, note, index\)\}/);
   assert.match(page, /data-note-drag-handle/);
@@ -111,4 +121,24 @@ test("dragging a note keeps the grab offset at every supported zoom", () => {
     assert.deepEqual(getNoteDragPosition(drag, 417 - 90 * zoom, 301 - 60 * zoom), { x: 160, y: 120 });
     assert.deepEqual(getNoteDragPosition(drag, -1000, -1000), { x: 22, y: 52 });
   }
+});
+
+test("a single link attempt rejects empty, self, duplicate and unavailable targets", () => {
+  const sections = [
+    { id: "a", stage: "discover", status: "In progress" },
+    { id: "b", stage: "discover", status: "Reviewed" },
+    { id: "c", stage: "define", status: "In progress" },
+    { id: "archived", stage: "discover", status: "Archived" },
+  ];
+  const attempt = { sourceId: "a", targetId: "b", sections, links: [] };
+  assert.equal(evaluateSectionLink(attempt), "valid");
+  assert.equal(evaluateSectionLink({ ...attempt, targetId: null }), "unavailable");
+  assert.equal(evaluateSectionLink({ ...attempt, targetId: "a" }), "same-section");
+  assert.equal(evaluateSectionLink({ ...attempt, links: [{ from: "a", to: "b" }] }), "duplicate");
+  assert.equal(evaluateSectionLink({ ...attempt, sourceId: null }), "unavailable");
+  assert.equal(evaluateSectionLink({ ...attempt, targetId: "missing" }), "unavailable");
+  assert.equal(evaluateSectionLink({ ...attempt, targetId: "archived" }), "unavailable");
+  assert.equal(evaluateSectionLink({ ...attempt, sourceId: "archived" }), "unavailable");
+  assert.equal(evaluateSectionLink({ ...attempt, targetId: "c" }), "unavailable");
+  assert.equal(evaluateSectionLink({ ...attempt, links: [{ from: "b", to: "a" }] }), "valid", "reverse direction is a distinct relationship");
 });
